@@ -66,8 +66,8 @@ export default function RegisterPage() {
            <div className="flex justify-center">
               <Image
                 src="https://i.imgur.com/uo4OdVQ.png" // Use the new logo URL
-                width={80} // Keep current width or adjust as needed
-                height={80} // Keep current height or adjust as needed
+                width={136} // Increased width by 70% (80 * 1.7)
+                height={136} // Increased height by 70% (80 * 1.7)
                 alt="Redocência Logo"
                 priority
               />
