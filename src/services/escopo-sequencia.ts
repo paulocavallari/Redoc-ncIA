@@ -71,7 +71,7 @@ const POSSIBLE_HEADERS: { [key in keyof EscopoSequenciaItem]?: string[] } = {
     anoSerie: ['ANO/SÉRIE', 'Ano/Série', 'Ano', 'Série'],
     bimestre: ['BIMESTRE', 'Bimestre'],
     habilidade: ['HABILIDADE', 'Habilidade', 'Habilidades'],
-    objetosDoConhecimento: ['OBJETOS DO CONHECIMENTO', 'Objetos do Conhecimento', 'Objeto do Conhecimento', 'Objetos de Conhecimento'],
+    objetosDoConhecimento: ['OBJETOS DO CONHECIMENTO', 'Objetos do Conhecimento', 'Objeto do Conhecimento', 'Objetos de Conhecimento', 'Objetos de conhecimento'], // Added 'Objetos de conhecimento'
     conteudo: ['CONTEUDO', 'Conteúdo', 'Conteudos', 'Conteúdos'], // Added 'Conteúdos' based on error log
     objetivos: ['OBJETIVOS', 'Objetivos', 'Objetivo'],
 };
