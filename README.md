@@ -1,4 +1,4 @@
-#**RedocêncIA: A Inteligência Artificial a Serviço da Docência.**
+##**RedocêncIA: A Inteligência Artificial a Serviço da Docência.**
 
 ## 📄 Descrição
 
