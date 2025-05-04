@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -104,7 +105,8 @@ const AlertDialogAction = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Action
     ref={ref}
-    className={cn(buttonVariants(), className)}
+    // Apply destructive variant directly for confirmation actions in destructive dialogs
+    className={cn(buttonVariants({ variant: "destructive" }), className)}
     {...props}
   />
 ))
@@ -139,3 +141,4 @@ export {
   AlertDialogAction,
   AlertDialogCancel,
 }
+

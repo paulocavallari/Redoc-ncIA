@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Settings, LogOut, BookOpenCheck, GraduationCap, BookCopy, Target, ListChecks, MessageSquare, Bot, Clock, CalendarDays, Layers, Paperclip, AlertTriangle, Library } from 'lucide-react'; // Added Layers, Paperclip, AlertTriangle, Library icons
+import { Settings, LogOut, BookOpenCheck, GraduationCap, BookCopy, Target, ListChecks, MessageSquare, Bot, Clock, CalendarDays, Layers, Paperclip, AlertTriangle, Library, Save, List } from 'lucide-react'; // Added Save, List icons
 import {
     getAllEscopoDataFromStorage, // Get data for all levels
     type EscopoSequenciaItem,
@@ -22,6 +22,7 @@ import {
 } from '@/services/escopo-sequencia';
 import { generateLessonPlan, type GenerateLessonPlanInput } from '@/ai/flows/generate-lesson-plan';
 import { suggestAdditionalContent, type SuggestAdditionalContentInput } from '@/ai/flows/suggest-additional-content';
+import { savePlan, type SavedPlanDetails } from '@/services/saved-plans'; // Import save plan service
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from "@/hooks/use-toast"; // Import useToast
@@ -68,6 +69,7 @@ export default function DashboardPage() {
   const [generatedPlan, setGeneratedPlan] = useState('');
   const [suggestingContent, setSuggestingContent] = useState(false);
   const [suggestedContent, setSuggestedContent] = useState<string[]>([]);
+  const [isSavingPlan, setIsSavingPlan] = useState(false); // State for saving plan
 
   // Get the relevant data based on the selected level
   const currentLevelData = useMemo(() => {
@@ -467,6 +469,54 @@ export default function DashboardPage() {
      }
    };
 
+  // Function to save the generated plan
+  const handleSavePlan = async () => {
+      if (!user || !generatedPlan || !selectedLevel || !subject || !yearSeries || !bimestre || !knowledgeObject || selectedContents.length === 0 || selectedSkills.length === 0 || !aulaDuracao) {
+          toast({
+              title: "Erro ao Salvar",
+              description: "Plano de aula ou informações essenciais estão faltando para salvar.",
+              variant: "destructive",
+          });
+          return;
+      }
+
+      setIsSavingPlan(true);
+      try {
+          const planDetails: SavedPlanDetails = {
+              userId: user.id, // Or user.username if that's the identifier
+              level: selectedLevel,
+              yearSeries: fullYearSeriesString,
+              subject: subject,
+              bimestre: bimestre,
+              knowledgeObject: knowledgeObject,
+              contents: selectedContents,
+              skills: selectedSkills,
+              duration: aulaDuracao,
+              additionalInstructions: additionalInstructions || undefined,
+              generatedPlan: generatedPlan,
+              createdAt: new Date().toISOString(), // Store creation date
+          };
+
+          await savePlan(planDetails); // Call the save function from the service
+
+          toast({
+              title: "Plano Salvo",
+              description: "Seu plano de aula foi salvo com sucesso!",
+              variant: "default",
+          });
+
+      } catch (error) {
+          console.error("Error saving lesson plan:", error);
+          toast({
+              title: "Erro ao Salvar",
+              description: `Não foi possível salvar o plano de aula. ${error instanceof Error ? error.message : 'Erro desconhecido.'}`,
+              variant: "destructive",
+          });
+      } finally {
+          setIsSavingPlan(false);
+      }
+  };
+
 
   if (authLoading || !user) {
     // Show loading state or redirect handled in useEffect
@@ -479,9 +529,9 @@ export default function DashboardPage() {
   }
 
    // Consolidate disabling conditions
-   const formDisabled = loadingData || generatingPlan || readingFile || showDataMissingAlert;
+   const formDisabled = loadingData || generatingPlan || readingFile || showDataMissingAlert || isSavingPlan;
    const generateButtonDisabled = formDisabled || selectedContents.length === 0 || selectedSkills.length === 0 || !aulaDuracao; // Updated condition
-
+   const saveButtonDisabled = formDisabled || !generatedPlan || generatingPlan || readingFile; // Disable save if no plan or while generating/reading
 
   return (
     <div className="flex min-h-screen flex-col bg-secondary">
@@ -493,6 +543,11 @@ export default function DashboardPage() {
          </div>
         <div className="flex items-center gap-4">
           <span className="text-sm text-muted-foreground hidden sm:inline">Olá, {user.name}!</span>
+           <Link href="/saved-plans" passHref>
+                <Button variant="outline" size="icon" aria-label="Planos Salvos">
+                  <List className="h-5 w-5" />
+                </Button>
+           </Link>
           {user.username === 'admin' && (
             <Link href="/settings" passHref>
               <Button variant="ghost" size="icon" aria-label="Configurações">
@@ -801,10 +856,21 @@ export default function DashboardPage() {
          {/* Right Column: AI Response */}
          <Card className="shadow-md flex flex-col">
             <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-xl">
-                <Bot className="h-6 w-6 text-primary" />
-                Sugestão da IA
-                </CardTitle>
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                         <Bot className="h-6 w-6 text-primary" />
+                         <CardTitle className="text-xl">Sugestão da IA</CardTitle>
+                    </div>
+                     <Button
+                         variant="outline"
+                         size="sm"
+                         onClick={handleSavePlan}
+                         disabled={saveButtonDisabled}
+                     >
+                         <Save className="mr-2 h-4 w-4" />
+                         {isSavingPlan ? 'Salvando...' : 'Salvar Plano'}
+                     </Button>
+                </div>
                 <CardDescription>Aqui será exibido o plano de aula gerado.</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden"> {/* Make content area scrollable */}
