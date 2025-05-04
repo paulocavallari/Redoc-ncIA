@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -275,22 +274,24 @@ export default function DashboardPage() {
     };
 
     try {
-      console.log("Sending request to generateLessonPlan with input:", input);
+      console.log("[Dashboard] Sending request to generateLessonPlan with input:", input);
       const response = await generateLessonPlan(input);
       const htmlContent = markdownToHtml(response.lessonPlan); // Convert AI's markdown to HTML
       // setGeneratedPlan(response.lessonPlan); // Store raw if needed
       setEditablePlanContent(htmlContent); // Set editor content
       setIsPlanGenerated(true); // Mark plan as generated
+      console.log("[Dashboard] Lesson plan generated successfully.");
 
       // Suggest content after successful generation
       handleSuggestContent(input.conteudo, input.anoSerie, input.disciplina, response.lessonPlan);
 
-    } catch (error) {
-      console.error("Error generating lesson plan:", error);
-      // setGeneratedPlan("Erro ao gerar o plano.");
-      setEditablePlanContent("<p>Erro ao gerar o plano de aula. Verifique sua chave de API, o tamanho do arquivo anexado e tente novamente.</p>"); // Set error in editor
+    } catch (error: any) {
+      console.error("[Dashboard] Error generating lesson plan:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+       // Display the specific error message from the flow in the editor and toast
+      setEditablePlanContent(`<p><b>Erro ao gerar o plano de aula:</b> ${errorMessage}</p>`); // Set error in editor
       setIsPlanGenerated(true); // Mark as generated even if error, to show the error message
-      toast({ title: "Erro na Geração", description: "Falha ao gerar o plano. Verifique a chave de API, o arquivo anexado ou tente mais tarde.", variant: "destructive" });
+      toast({ title: "Erro na Geração", description: errorMessage, variant: "destructive", duration: 10000 }); // Use the specific error message
     } finally {
       setGeneratingPlan(false);
     }
