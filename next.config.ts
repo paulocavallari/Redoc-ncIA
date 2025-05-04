@@ -1,3 +1,4 @@
+
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
@@ -16,8 +17,15 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
+       { // Add configuration for imgur.com
+         protocol: 'https',
+         hostname: 'i.imgur.com',
+         port: '',
+         pathname: '/**',
+       },
     ],
   },
 };
 
 export default nextConfig;
+
