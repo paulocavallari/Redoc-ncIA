@@ -49,11 +49,10 @@ export default function LoginPage() {
            {/* Add the logo here */}
            <div className="flex justify-center">
               <Image
-                src="https://picsum.photos/200/80" // Placeholder image URL
+                src="/logo.png" // Use the actual logo path
                 width={200} // Adjust width as needed
-                height={80} // Adjust height as needed
+                height={80} // Adjust height as needed (maintain aspect ratio if possible)
                 alt="Redocência Logo"
-                data-ai-hint="brain book logo" // AI Hint for image replacement
                 priority
               />
            </div>
@@ -102,3 +101,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

@@ -46,11 +46,10 @@ export default function Header() {
         {/* Logo */}
         <Link href={isClient && user ? "/dashboard" : "/login"} className="flex items-center gap-2" aria-label="Página Inicial">
            <Image
-              src="https://picsum.photos/150/40" // Placeholder image URL
+              src="/logo.png" // Use the actual logo path
               width={150} // Adjust width as needed
-              height={40} // Adjust height as needed
+              height={40} // Adjust height as needed (maintain aspect ratio)
               alt="Redocência Logo"
-              data-ai-hint="brain book logo" // AI Hint for image replacement
               priority // Prioritize loading the logo
             />
         </Link>
@@ -124,3 +123,4 @@ export default function Header() {
     </header>
   );
 }
+
