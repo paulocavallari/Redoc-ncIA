@@ -90,7 +90,8 @@ export default function SettingsPage() {
     try {
         const fileData = await selectedFile.arrayBuffer();
         console.log(`Processing file: ${selectedFile.name}, size: ${fileData.byteLength} bytes for level: ${selectedLevel}`);
-        const processedData: EscopoSequenciaItem[] = processEscopoFile(fileData);
+        // Pass the selected level to processEscopoFile
+        const processedData: EscopoSequenciaItem[] = processEscopoFile(fileData, selectedLevel);
 
         if (processedData.length > 0) {
             // Pass the selected level to save function
