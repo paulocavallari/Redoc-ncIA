@@ -9,12 +9,16 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'; // Import RadioGroup
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Settings, LogOut, BookOpenCheck, GraduationCap, BookCopy, Target, ListChecks, MessageSquare, Bot, Clock, CalendarDays } from 'lucide-react';
-// Removed getEscopoSequenciaData as we now load from storage or rely on upload
-import { getEscopoDataFromStorage, type EscopoSequenciaItem } from '@/services/escopo-sequencia';
+import { Settings, LogOut, BookOpenCheck, GraduationCap, BookCopy, Target, ListChecks, MessageSquare, Bot, Clock, CalendarDays, Layers } from 'lucide-react'; // Added Layers icon
+import {
+    getAllEscopoDataFromStorage, // Get data for all levels
+    type EscopoSequenciaItem,
+    EducationLevel, // Import type
+    EDUCATION_LEVELS, // Import level constants
+} from '@/services/escopo-sequencia';
 import { generateLessonPlan, type GenerateLessonPlanInput } from '@/ai/flows/generate-lesson-plan';
 import { suggestAdditionalContent, type SuggestAdditionalContentInput } from '@/ai/flows/suggest-additional-content';
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -22,68 +26,35 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertTriangle } from 'lucide-react';
 
 
-// Education Level mapping (adjust if needed based on 'anoSerie' values in your XLSX)
-const educationLevelMap: Record<string, string> = {
-    '1º ano': 'Ensino Fundamental: Anos Iniciais',
-    '2º ano': 'Ensino Fundamental: Anos Iniciais',
-    '3º ano': 'Ensino Fundamental: Anos Iniciais',
-    '4º ano': 'Ensino Fundamental: Anos Iniciais',
-    '5º ano': 'Ensino Fundamental: Anos Iniciais',
-    '6º ano': 'Ensino Fundamental: Anos Finais',
-    '7º ano': 'Ensino Fundamental: Anos Finais',
-    '8º ano': 'Ensino Fundamental: Anos Finais',
-    '9º ano': 'Ensino Fundamental: Anos Finais',
-    '1ª série': 'Ensino Médio',
-    '2ª série': 'Ensino Médio',
-    '3ª série': 'Ensino Médio',
-    // Add specific mapping for Noturno if the file uses a distinct string like "1ª série - Noturno"
-    // Example: '1ª série - Noturno': 'Ensino Médio Noturno',
-};
-
-const getEducationLevel = (anoSerie: string): string => {
-    // Check for explicit "Noturno" level first if it exists in the map keys
-    if (educationLevelMap[anoSerie]) {
-        return educationLevelMap[anoSerie];
-    }
-    // Fallback: Check if the string contains "Noturno" and maps to Ensino Médio
-    if (anoSerie.toLowerCase().includes('noturno') && (anoSerie.includes('1ª') || anoSerie.includes('2ª') || anoSerie.includes('3ª'))) {
-       return 'Ensino Médio Noturno';
-    }
-    // General mapping for Ensino Médio based on series number
-    if (anoSerie.includes('1ª série') || anoSerie.includes('2ª série') || anoSerie.includes('3ª série')) {
-        return 'Ensino Médio';
-    }
-    // Check standard mappings
-    for (const key in educationLevelMap) {
-        if (anoSerie.startsWith(key.split(' ')[0])) { // Match based on year/series number primarily
-            return educationLevelMap[key];
-        }
-    }
-    return 'Desconhecido'; // Default if not found
-};
-
-
+// Duration options - keep the standard ones for now
 const aulaDuracaoOptions: string[] = [
     '1 aula (45/50 min)',
     '2 aulas (90/100 min)',
     '3 aulas (135/150 min)',
-    // Add specific Noturno options if they differ, e.g.:
-    // '1 aula Noturno (40 min)',
-    // '2 aulas Noturno (80 min)',
+];
+
+// Specific duration options for Noturno
+const aulaDuracaoNoturnoOptions: string[] = [
+    '1 aula Noturno (40 min)',
+    '2 aulas Noturno (80 min)',
+    // Add more if needed
 ];
 
 export default function DashboardPage() {
   const { user, logout, isLoading: authLoading } = useAuth();
   const router = useRouter();
 
-  const [escopoData, setEscopoData] = useState<EscopoSequenciaItem[]>([]);
+  // Store data for all levels
+  const [allEscopoData, setAllEscopoData] = useState<{ [key in EducationLevel]?: EscopoSequenciaItem[] }>({});
   const [loadingData, setLoadingData] = useState(true);
   const [showDataMissingAlert, setShowDataMissingAlert] = useState(false);
+  const [missingLevels, setMissingLevels] = useState<EducationLevel[]>([]);
 
   // Form State
-  const [yearSeries, setYearSeries] = useState('');
+  const [selectedLevel, setSelectedLevel] = useState<EducationLevel | ''>(''); // New state for selected level
+  const [yearSeries, setYearSeries] = useState(''); // This is now just the number '6', '1', etc.
   const [subject, setSubject] = useState(''); // 'disciplina' in Portuguese
-  const [bimestre, setBimestre] = useState(''); // New state for Bimester
+  const [bimestre, setBimestre] = useState(''); // New state for Bimester number '1', '2', etc.
   const [content, setContent] = useState(''); // 'conteudo' in Portuguese - Now derived from skill
   const [knowledgeObject, setKnowledgeObject] = useState(''); // New state for 'objetosDoConhecimento'
   const [selectedSkill, setSelectedSkill] = useState<string>('');
@@ -93,6 +64,11 @@ export default function DashboardPage() {
   const [generatedPlan, setGeneratedPlan] = useState('');
   const [suggestingContent, setSuggestingContent] = useState(false);
   const [suggestedContent, setSuggestedContent] = useState<string[]>([]);
+
+  // Get the relevant data based on the selected level
+  const currentLevelData = useMemo(() => {
+    return selectedLevel ? allEscopoData[selectedLevel] ?? [] : [];
+  }, [selectedLevel, allEscopoData]);
 
 
   useEffect(() => {
@@ -106,10 +82,18 @@ export default function DashboardPage() {
     // Load Escopo-Sequencia data from localStorage on mount (client-side only)
     const loadData = () => {
       setLoadingData(true);
-      const data = getEscopoDataFromStorage();
-      setEscopoData(data);
-       if (data.length === 0) {
-         setShowDataMissingAlert(true); // Show alert if no data found
+      const data = getAllEscopoDataFromStorage(); // Load data for all levels
+      setAllEscopoData(data);
+
+       // Check if *any* level has data
+       const hasAnyData = EDUCATION_LEVELS.some(level => data[level] && data[level]!.length > 0);
+       const levelsWithoutData = EDUCATION_LEVELS.filter(level => !data[level] || data[level]!.length === 0);
+       setMissingLevels(levelsWithoutData);
+
+       if (!hasAnyData && user?.username === 'admin') {
+          setShowDataMissingAlert(true); // Show alert if NO data found at all for admin
+       } else if (!hasAnyData && user?.username !== 'admin'){
+           setShowDataMissingAlert(true); // Show alert if NO data found at all for non-admin
        } else {
          setShowDataMissingAlert(false);
        }
@@ -127,90 +111,72 @@ export default function DashboardPage() {
        setShowDataMissingAlert(true); // Assume no data on server
     }
 
-  }, []); // Empty dependency array ensures this runs once on mount/client load
+  }, [user]); // Add user dependency to re-evaluate alert visibility
 
   // --- Derived options based on selections ---
 
-  // Available Years/Series (unique values from the loaded data)
+  // Available Years/Series (unique values from the current level's data)
    const availableYears = useMemo(() => {
-     if (!escopoData.length) return [];
-     // Sort based on typical school order
-     const sortedYears = [...new Set(escopoData.map(item => item.anoSerie))]
-         .sort((a, b) => {
-             const numA = parseInt(a.match(/\d+/)?.[0] || '0');
-             const numB = parseInt(b.match(/\d+/)?.[0] || '0');
-             const typeA = a.includes('série') ? 1 : (a.includes('ano') ? 0 : 2); // 0 for ano, 1 for série, 2 otherwise
-             const typeB = b.includes('série') ? 1 : (b.includes('ano') ? 0 : 2);
-
-             if (typeA !== typeB) return typeA - typeB; // Group 'ano' then 'série'
-             return numA - numB;
-         });
+     if (!selectedLevel || !currentLevelData.length) return [];
+     // Sort numerically
+     const sortedYears = [...new Set(currentLevelData.map(item => item.anoSerie))]
+         .sort((a, b) => parseInt(a) - parseInt(b));
      return sortedYears;
-   }, [escopoData]);
+   }, [selectedLevel, currentLevelData]);
 
-   // Available Subjects for the selected Year/Series
+   // Available Subjects for the selected Level and Year/Series
    const availableSubjects = useMemo(() => {
-     if (!yearSeries || !escopoData.length) return [];
-     return [...new Set(escopoData.filter(item => item.anoSerie === yearSeries).map(item => item.disciplina))].sort();
-   }, [yearSeries, escopoData]);
+     if (!selectedLevel || !yearSeries || !currentLevelData.length) return [];
+     return [...new Set(currentLevelData.filter(item => item.anoSerie === yearSeries).map(item => item.disciplina))].sort();
+   }, [selectedLevel, yearSeries, currentLevelData]);
 
-    // Available Bimestres for the selected Year/Series and Subject
+    // Available Bimestres for the selected Level, Year/Series and Subject
    const availableBimestres = useMemo(() => {
-     if (!subject || !yearSeries || !escopoData.length) return [];
-     const bimestres = [...new Set(escopoData
+     if (!selectedLevel || !subject || !yearSeries || !currentLevelData.length) return [];
+     const bimestres = [...new Set(currentLevelData
        .filter(item => item.anoSerie === yearSeries && item.disciplina === subject)
-       .map(item => item.bimestre)
-       )].sort((a, b) => {
-         // Sort bimestres numerically (1º, 2º, 3º, 4º)
-         const numA = parseInt(a.match(/\d+/)?.[0] || '0');
-         const numB = parseInt(b.match(/\d+/)?.[0] || '0');
-         return numA - numB;
-       });
+       .map(item => item.bimestre) // This is already just the number '1', '2', etc.
+       )].sort((a, b) => parseInt(a) - parseInt(b)); // Sort numerically
      return bimestres;
-   }, [subject, yearSeries, escopoData]);
+   }, [selectedLevel, subject, yearSeries, currentLevelData]);
 
-    // Available Knowledge Objects for the selected Year/Series, Subject, and Bimester
+    // Available Knowledge Objects for the selected Level, Year/Series, Subject, and Bimester
    const availableKnowledgeObjects = useMemo(() => {
-     if (!bimestre || !subject || !yearSeries || !escopoData.length) return [];
-     return [...new Set(escopoData
+     if (!selectedLevel || !bimestre || !subject || !yearSeries || !currentLevelData.length) return [];
+     return [...new Set(currentLevelData
         .filter(item => item.anoSerie === yearSeries && item.disciplina === subject && item.bimestre === bimestre)
         .map(item => item.objetosDoConhecimento))]
         .sort();
-   }, [bimestre, subject, yearSeries, escopoData]);
+   }, [selectedLevel, bimestre, subject, yearSeries, currentLevelData]);
 
-  // Available Skills based on Year, Subject, Bimester, and Knowledge Object
+  // Available Skills based on Level, Year, Subject, Bimester, and Knowledge Object
   const availableSkills = useMemo(() => {
-      if (!knowledgeObject || !bimestre || !subject || !yearSeries || !escopoData.length) return [];
+      if (!selectedLevel || !knowledgeObject || !bimestre || !subject || !yearSeries || !currentLevelData.length) return [];
       // Find items matching the current selection
-      const matchingItems = escopoData.filter(item =>
+      const matchingItems = currentLevelData.filter(item =>
           item.anoSerie === yearSeries &&
           item.disciplina === subject &&
-          item.bimestre === bimestre && // Filter by bimestre
+          item.bimestre === bimestre && // Filter by bimestre number
           item.objetosDoConhecimento === knowledgeObject
       );
       // Extract unique skills from matching items
       const skillsSet = new Set<string>();
       matchingItems.forEach(item => {
-           // Handle potential variations in how skills are stored (string vs array)
            if (typeof item.habilidade === 'string') {
               skillsSet.add(item.habilidade.trim());
            }
-           // If 'habilidades' array exists and is used, handle it here:
-           // else if (Array.isArray(item.habilidades)) {
-           //    item.habilidades.forEach(skill => skillsSet.add(skill.trim()));
-           // }
       });
       return Array.from(skillsSet).sort();
-  }, [knowledgeObject, bimestre, subject, yearSeries, escopoData]);
+  }, [selectedLevel, knowledgeObject, bimestre, subject, yearSeries, currentLevelData]);
 
 
-   // Derive Content based on the selected Skill (find the first matching content)
+   // Derive Content based on the selected Skill
     useEffect(() => {
-        if (!selectedSkill || !knowledgeObject || !bimestre || !subject || !yearSeries || !escopoData.length) {
+        if (!selectedSkill || !knowledgeObject || !bimestre || !subject || !yearSeries || !selectedLevel || !currentLevelData.length) {
             setContent('');
             return;
         }
-        const matchingItem = escopoData.find(item =>
+        const matchingItem = currentLevelData.find(item =>
             item.anoSerie === yearSeries &&
             item.disciplina === subject &&
             item.bimestre === bimestre &&
@@ -218,10 +184,23 @@ export default function DashboardPage() {
             item.habilidade === selectedSkill // Match based on selected skill now
         );
         setContent(matchingItem?.conteudo || ''); // Set content from the match, or empty if none
-    }, [selectedSkill, knowledgeObject, bimestre, subject, yearSeries, escopoData]);
+    }, [selectedSkill, knowledgeObject, bimestre, subject, yearSeries, selectedLevel, currentLevelData]);
 
 
   // --- Reset dependent fields when a higher-level field changes ---
+   const handleLevelChange = (value: string) => {
+    setSelectedLevel(value as EducationLevel);
+    setYearSeries('');
+    setSubject('');
+    setBimestre('');
+    setKnowledgeObject('');
+    setSelectedSkill('');
+    setContent('');
+    setAulaDuracao('');
+    setGeneratedPlan('');
+    setSuggestedContent([]);
+   };
+
   const handleYearChange = (value: string) => {
     setYearSeries(value);
     setSubject('');
@@ -275,29 +254,56 @@ export default function DashboardPage() {
 
   const handleDurationChange = (value: string) => {
       setAulaDuracao(value);
-      setGeneratedPlan('');
-      setSuggestedContent([]);
+      setGeneratedPlan(''); // Reset plan if duration changes
+      setSuggestedContent([]); // Reset suggestions if duration changes
   };
 
   // Determine if the current selection is for 'Ensino Médio Noturno'
   const isEnsinoMedioNoturno = useMemo(() => {
-      return getEducationLevel(yearSeries) === 'Ensino Médio Noturno';
-  }, [yearSeries]);
+      return selectedLevel === 'Ensino Médio Noturno';
+  }, [selectedLevel]);
 
   // Filter aulaDuracaoOptions based on whether it's Ensino Médio Noturno
-  const filteredAulaDuracaoOptions = useMemo(() => {
-      // In a real scenario, you might have specific options for Noturno, e.g.:
-      // if (isEnsinoMedioNoturno) {
-      //     return ['1 aula Noturno (40 min)', '2 aulas Noturno (80 min)'];
-      // }
-      // For now, just return the standard options, but the logic is here
-      return aulaDuracaoOptions;
+  const currentAulaDuracaoOptions = useMemo(() => {
+      return isEnsinoMedioNoturno ? aulaDuracaoNoturnoOptions : aulaDuracaoOptions;
   }, [isEnsinoMedioNoturno]);
+
+   // Helper function to format Year/Series for display
+   const formatYearSeriesDisplay = (year: string, level: EducationLevel | ''): string => {
+       if (!year || !level) return year;
+       if (level.includes('Anos Iniciais') || level.includes('Anos Finais')) return `${year}º ano`;
+       if (level.includes('Ensino Médio')) return `${year}ª série`; // Includes Noturno and Técnico
+       return year; // Fallback
+   };
+
+    // Helper function to format Bimestre for display
+    const formatBimestreDisplay = (bimestreNum: string): string => {
+        if (!bimestreNum) return '';
+        return `${bimestreNum}º Bimestre`;
+    };
+
+    // Full year/series string needed for the AI prompt
+    const fullYearSeriesString = useMemo(() => {
+        if (!yearSeries || !selectedLevel) return '';
+        const yearPart = formatYearSeriesDisplay(yearSeries, selectedLevel);
+        let levelPart = '';
+        if (selectedLevel.includes('Anos Iniciais')) levelPart = ' do Ensino Fundamental';
+        else if (selectedLevel.includes('Anos Finais')) levelPart = ' do Ensino Fundamental';
+        else if (selectedLevel.includes('Ensino Médio')) levelPart = ' do Ensino Médio'; // Covers Regular, Noturno, Técnico
+
+        // Add Noturno specifier if applicable
+        if (selectedLevel === 'Ensino Médio Noturno') levelPart += ' Noturno';
+        // Add Técnico specifier if applicable (might need refinement based on exact needs)
+        if (selectedLevel.startsWith('Ensino Médio Técnico')) levelPart += ' Técnico';
+
+
+        return `${yearPart}${levelPart}`;
+    }, [yearSeries, selectedLevel]);
 
 
   const handleGeneratePlan = async () => {
-    if (!subject || !yearSeries || !bimestre || !knowledgeObject || !selectedSkill || !aulaDuracao || !content) {
-      console.error("Por favor, preencha todos os campos obrigatórios (Ano/Série, Disciplina, Bimestre, Objeto de Conhecimento, Habilidade, Duração). Content: ", content);
+    if (!selectedLevel || !subject || !yearSeries || !bimestre || !knowledgeObject || !selectedSkill || !aulaDuracao || !content) {
+      console.error("Por favor, preencha todos os campos obrigatórios (Nível, Ano/Série, Disciplina, Bimestre, Objeto, Habilidade, Duração). Content: ", content);
       // TODO: Show toast message
       return;
     }
@@ -309,7 +315,7 @@ export default function DashboardPage() {
 
     const input: GenerateLessonPlanInput = {
       disciplina: subject,
-      anoSerie: yearSeries,
+      anoSerie: fullYearSeriesString, // Use the fully constructed string
       habilidade: selectedSkill,
       conteudo: content, // Use the derived content based on skill
       aulaDuracao: aulaDuracao,
@@ -320,7 +326,7 @@ export default function DashboardPage() {
       const response = await generateLessonPlan(input);
       setGeneratedPlan(response.lessonPlan);
 
-      // Suggest additional content based on the derived content
+      // Suggest additional content based on the derived content and full year string
       handleSuggestContent(input.conteudo, input.anoSerie, input.disciplina, response.lessonPlan);
 
     } catch (error) {
@@ -339,7 +345,7 @@ export default function DashboardPage() {
      try {
        const input: SuggestAdditionalContentInput = {
            topic: topic, // Use the derived content as the topic
-           gradeLevel: gradeLevel,
+           gradeLevel: gradeLevel, // Use the full year string
            subject: subject,
            currentContent: currentContent
        };
@@ -363,6 +369,9 @@ export default function DashboardPage() {
        </div>
     );
   }
+
+   const formDisabled = loadingData || generatingPlan || showDataMissingAlert;
+
 
   return (
     <div className="flex min-h-screen flex-col bg-secondary">
@@ -391,32 +400,39 @@ export default function DashboardPage() {
        <main className="flex-1 p-4 md:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
 
          {/* Data Missing Alert */}
-         {showDataMissingAlert && !loadingData && user?.username === 'admin' && (
-            <div className="lg:col-span-2">
-                <Alert variant="destructive">
-                 <AlertTriangle className="h-4 w-4" />
-                 <AlertTitle>Dados Não Encontrados</AlertTitle>
-                 <AlertDescription>
-                   Os dados do Escopo-Sequência não foram encontrados no armazenamento local. Por favor, vá para <Link href="/settings" className="font-medium underline">Configurações</Link> para fazer o upload do arquivo XLSX.
-                 </AlertDescription>
-                </Alert>
-            </div>
-         )}
-          {showDataMissingAlert && !loadingData && user?.username !== 'admin' && (
-            <div className="lg:col-span-2">
-                <Alert variant="destructive">
-                 <AlertTriangle className="h-4 w-4" />
-                 <AlertTitle>Dados Não Disponíveis</AlertTitle>
-                 <AlertDescription>
-                   Os dados necessários para gerar planos de aula não estão disponíveis. Entre em contato com o administrador para fazer o upload dos dados.
-                 </AlertDescription>
-                </Alert>
-            </div>
-         )}
+         {showDataMissingAlert && !loadingData && (
+             <div className="lg:col-span-2">
+                 <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Dados Não Encontrados</AlertTitle>
+                  <AlertDescription>
+                    {user?.username === 'admin' ? (
+                      <>
+                       Nenhum dado do Escopo-Sequência foi encontrado no armazenamento local para nenhum nível de ensino. Por favor, vá para <Link href="/settings" className="font-medium underline">Configurações</Link> para fazer o upload dos arquivos XLSX necessários.
+                       {missingLevels.length > 0 && <p className="mt-1 text-xs">Níveis faltando: {missingLevels.join(', ')}</p>}
+                      </>
+                    ) : (
+                      "Os dados necessários para gerar planos de aula não estão disponíveis. Entre em contato com o administrador para fazer o upload dos dados."
+                    )}
+                  </AlertDescription>
+                 </Alert>
+             </div>
+          )}
+          {!showDataMissingAlert && missingLevels.length > 0 && user?.username === 'admin' && !loadingData && (
+              <div className="lg:col-span-2">
+                 <Alert variant="default" className="border-yellow-500 text-yellow-700 [&>svg]:text-yellow-500 dark:border-yellow-600 dark:text-yellow-300 dark:[&>svg]:text-yellow-600 bg-yellow-50 dark:bg-yellow-950">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Dados Incompletos</AlertTitle>
+                  <AlertDescription>
+                      Dados do Escopo-Sequência estão faltando para os seguintes níveis: <strong>{missingLevels.join(', ')}</strong>. Vá para <Link href="/settings" className="font-medium underline">Configurações</Link> para carregá-los.
+                  </AlertDescription>
+                 </Alert>
+              </div>
+          )}
 
 
         {/* Left Column: Form */}
-        <Card className={`shadow-md ${showDataMissingAlert ? 'opacity-50 pointer-events-none' : ''}`}>
+        <Card className={`shadow-md ${formDisabled ? 'opacity-50 pointer-events-none' : ''}`}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
               <GraduationCap className="h-6 w-6 text-primary" />
@@ -426,6 +442,29 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-4">
 
+             {/* Education Level */}
+            <div className="space-y-2">
+               <Label htmlFor="levelSelect" className="flex items-center gap-1">
+                  <Layers className="h-4 w-4" /> Nível de Ensino *
+               </Label>
+               <Select
+                  value={selectedLevel}
+                  onValueChange={handleLevelChange}
+                  disabled={formDisabled}
+               >
+                  <SelectTrigger id="levelSelect">
+                     <SelectValue placeholder={loadingData ? "Carregando..." : "Selecione o nível"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                     {EDUCATION_LEVELS.map(level => (
+                        <SelectItem key={level} value={level} disabled={missingLevels.includes(level)}>
+                           {level} {missingLevels.includes(level) ? '(Dados não carregados)' : ''}
+                        </SelectItem>
+                     ))}
+                  </SelectContent>
+               </Select>
+            </div>
+
              {/* Year/Series */}
             <div className="space-y-2">
               <Label htmlFor="yearSeries" className="flex items-center gap-1">
@@ -434,14 +473,14 @@ export default function DashboardPage() {
               <Select
                 value={yearSeries}
                 onValueChange={handleYearChange}
-                disabled={loadingData || generatingPlan || escopoData.length === 0}
+                disabled={formDisabled || !selectedLevel} // Disable if no level selected
               >
                 <SelectTrigger id="yearSeries">
-                  <SelectValue placeholder={loadingData ? "Carregando..." : "Selecione o ano/série"} />
+                  <SelectValue placeholder={loadingData ? "Carregando..." : (!selectedLevel ? "Selecione nível primeiro" : "Selecione o ano/série")} />
                 </SelectTrigger>
                 <SelectContent>
                   {availableYears.map(year => (
-                    <SelectItem key={year} value={year}>{year} ({getEducationLevel(year)})</SelectItem>
+                    <SelectItem key={year} value={year}>{formatYearSeriesDisplay(year, selectedLevel)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -455,7 +494,7 @@ export default function DashboardPage() {
               <Select
                 value={subject}
                 onValueChange={handleSubjectChange}
-                disabled={!yearSeries || loadingData || generatingPlan || escopoData.length === 0}
+                disabled={formDisabled || !yearSeries} // Depends on yearSeries
               >
                 <SelectTrigger id="subject">
                   <SelectValue placeholder={!yearSeries ? "Selecione ano/série primeiro" : "Selecione a disciplina"} />
@@ -478,14 +517,14 @@ export default function DashboardPage() {
               <Select
                 value={bimestre}
                 onValueChange={handleBimestreChange}
-                disabled={!subject || loadingData || generatingPlan || escopoData.length === 0}
+                disabled={formDisabled || !subject} // Depends on subject
               >
                 <SelectTrigger id="bimestre">
                   <SelectValue placeholder={!subject ? "Selecione a disciplina primeiro" : "Selecione o bimestre"} />
                 </SelectTrigger>
                 <SelectContent>
                    {availableBimestres.map(bim => (
-                     <SelectItem key={bim} value={bim}>{bim}</SelectItem>
+                     <SelectItem key={bim} value={bim}>{formatBimestreDisplay(bim)}</SelectItem> // Display formatted
                    ))}
                 </SelectContent>
               </Select>
@@ -499,7 +538,7 @@ export default function DashboardPage() {
               <Select
                 value={knowledgeObject}
                 onValueChange={handleKnowledgeObjectChange}
-                disabled={!bimestre || loadingData || generatingPlan || escopoData.length === 0} // Depends on bimestre now
+                disabled={formDisabled || !bimestre} // Depends on bimestre now
               >
                 <SelectTrigger id="knowledgeObject">
                   <SelectValue placeholder={!bimestre ? "Selecione o bimestre primeiro" : "Selecione o objeto de conhecimento"} />
@@ -523,7 +562,7 @@ export default function DashboardPage() {
                      <RadioGroup
                         value={selectedSkill}
                         onValueChange={handleSkillChange}
-                        disabled={generatingPlan || escopoData.length === 0 || !knowledgeObject} // Depends on knowledge object
+                        disabled={formDisabled || !knowledgeObject} // Depends on knowledge object
                         className="space-y-2"
                      >
                        {availableSkills.map(skill => (
@@ -558,20 +597,20 @@ export default function DashboardPage() {
                  value={aulaDuracao}
                  onValueChange={handleDurationChange}
                  // Enable when a skill is selected and content is derived
-                 disabled={!selectedSkill || !content || loadingData || generatingPlan || escopoData.length === 0}
+                 disabled={formDisabled || !selectedSkill || !content}
                >
                  <SelectTrigger id="aulaDuracao">
                    <SelectValue placeholder={!selectedSkill || !content ? "Selecione uma habilidade primeiro" : "Selecione a duração"} />
                  </SelectTrigger>
                  <SelectContent>
-                   {/* Render only filtered options */}
-                   {filteredAulaDuracaoOptions.map(dur => (
+                   {/* Render options based on selected level (Noturno or standard) */}
+                   {currentAulaDuracaoOptions.map(dur => (
                      <SelectItem key={dur} value={dur}>{dur}</SelectItem>
                    ))}
                  </SelectContent>
                </Select>
                 {/* Optional: Add a note about Noturno duration */}
-                {/* {isEnsinoMedioNoturno && <p className="text-xs text-muted-foreground mt-1">Durações específicas para Ensino Médio Noturno.</p>} */}
+                {isEnsinoMedioNoturno && <p className="text-xs text-muted-foreground mt-1">Durações específicas para Ensino Médio Noturno.</p>}
              </div>
 
 
@@ -586,14 +625,14 @@ export default function DashboardPage() {
                 value={additionalInstructions}
                 onChange={(e) => setAdditionalInstructions(e.target.value)}
                 rows={3}
-                disabled={generatingPlan || escopoData.length === 0}
+                disabled={formDisabled}
               />
             </div>
 
             {/* Generate Button */}
             <Button
               onClick={handleGeneratePlan}
-              disabled={!selectedSkill || !aulaDuracao || !content || loadingData || generatingPlan || escopoData.length === 0} // Check all required fields including content
+              disabled={formDisabled || !selectedSkill || !aulaDuracao || !content} // Check all required fields including content
               className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
             >
               {generatingPlan ? 'Gerando...' : 'Gerar Plano de Aula'}
@@ -640,25 +679,14 @@ export default function DashboardPage() {
                             }
                             // Bullet points (* or -)
                              if (line.startsWith('* ') || line.startsWith('- ')) {
-                                // Check if it's inside a list already, rudimentary check
-                                const prevLine = index > 0 ? generatedPlan.split('\n')[index - 1].trim() : '';
-                                const isListItem = prevLine.startsWith('* ') || prevLine.startsWith('- ');
-                                const Tag = isListItem ? React.Fragment : 'ul'; // Wrap first item in ul
                                 return (
-                                    //<Tag key={index}> {/* Simple wrap, might nest incorrectly */}
-                                        <li key={index} className="ml-5 list-disc">{line.slice(2)}</li>
-                                    //</Tag>
+                                     <li key={index} className="ml-5 list-disc">{line.slice(2)}</li>
                                 );
                             }
                              // Numbered lists (e.g., 1.)
                              if (/^\d+\.\s/.test(line)) {
-                                 const prevLine = index > 0 ? generatedPlan.split('\n')[index - 1].trim() : '';
-                                 const isListItem = /^\d+\.\s/.test(prevLine);
-                                 const Tag = isListItem ? React.Fragment : 'ol';
                                  return (
-                                    //<Tag key={index}> {/* Simple wrap */}
-                                        <li key={index} className="ml-5 list-decimal">{line.replace(/^\d+\.\s/, '')}</li>
-                                    //</Tag>
+                                     <li key={index} className="ml-5 list-decimal">{line.replace(/^\d+\.\s/, '')}</li>
                                  );
                              }
                              // Estimated time in parentheses
@@ -697,8 +725,8 @@ export default function DashboardPage() {
                     </div>
                 ) : (
                     <p className="text-muted-foreground">
-                        {escopoData.length === 0 && !loadingData
-                            ? "Carregue os dados do Escopo-Sequência nas configurações para começar."
+                        {showDataMissingAlert
+                            ? (user?.username === 'admin' ? "Carregue os dados do Escopo-Sequência nas configurações para começar." : "Dados indisponíveis. Contacte o administrador.")
                             : "Selecione as opções e clique em \"Gerar Plano de Aula\"."}
                      </p>
                 )}

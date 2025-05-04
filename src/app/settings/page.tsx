@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -8,10 +9,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { useToast } from "@/hooks/use-toast";
-import { Upload, KeyRound, ArrowLeft, BookOpenCheck, AlertTriangle } from 'lucide-react';
+import { Upload, KeyRound, ArrowLeft, BookOpenCheck, AlertTriangle, GraduationCap } from 'lucide-react'; // Added GraduationCap
 import Link from 'next/link';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { processEscopoFile, saveEscopoDataToStorage, EscopoSequenciaItem } from '@/services/escopo-sequencia';
+import { processEscopoFile, saveEscopoDataToStorage, EscopoSequenciaItem, EducationLevel, EDUCATION_LEVELS } from '@/services/escopo-sequencia'; // Import EducationLevel related items
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Import Select components
 
 
 // Local storage key can still be used for display/reference, but the hardcoded key is used by Genkit
@@ -25,6 +27,7 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedLevel, setSelectedLevel] = useState<EducationLevel | ''>(''); // State for selected education level
   const [isUploading, setIsUploading] = useState(false);
   const [isSavingKey, setIsSavingKey] = useState(false);
 
@@ -66,6 +69,14 @@ export default function SettingsPage() {
   };
 
   const handleUpload = async () => {
+    if (!selectedLevel) {
+       toast({
+           title: "Nível de Ensino Não Selecionado",
+           description: "Por favor, selecione o nível de ensino correspondente ao arquivo.",
+           variant: "destructive",
+       });
+       return;
+    }
     if (!selectedFile) {
       toast({
         title: "Nenhum Arquivo Selecionado",
@@ -78,14 +89,15 @@ export default function SettingsPage() {
     setIsUploading(true);
     try {
         const fileData = await selectedFile.arrayBuffer();
-        console.log(`Processing file: ${selectedFile.name}, size: ${fileData.byteLength} bytes`);
+        console.log(`Processing file: ${selectedFile.name}, size: ${fileData.byteLength} bytes for level: ${selectedLevel}`);
         const processedData: EscopoSequenciaItem[] = processEscopoFile(fileData);
 
         if (processedData.length > 0) {
-            saveEscopoDataToStorage(processedData);
+            // Pass the selected level to save function
+            saveEscopoDataToStorage(selectedLevel, processedData);
             toast({
                 title: "Upload Concluído",
-                description: `Arquivo "${selectedFile.name}" processado com sucesso. ${processedData.length} itens carregados.`,
+                description: `Arquivo "${selectedFile.name}" processado para ${selectedLevel}. ${processedData.length} itens carregados. Os dados anteriores para este nível foram substituídos.`,
             });
              // Dispatch event to notify dashboard to reload data
              window.dispatchEvent(new CustomEvent('escopoDataUpdated'));
@@ -93,7 +105,7 @@ export default function SettingsPage() {
         } else {
              toast({
                 title: "Processamento Concluído",
-                description: `Nenhum dado válido encontrado no arquivo "${selectedFile.name}" ou as colunas esperadas estão ausentes/incorretas. Verifique o console para mais detalhes.`,
+                description: `Nenhum dado válido encontrado no arquivo "${selectedFile.name}" ou as colunas esperadas estão ausentes/incorretas. Verifique o console para mais detalhes. Nenhum dado foi salvo para ${selectedLevel}.`,
                 variant: "destructive", // Use destructive for warnings/errors during processing
                 duration: 10000, // Longer duration for error messages
             });
@@ -103,6 +115,8 @@ export default function SettingsPage() {
         // Clear the file input visually
         const fileInput = document.getElementById('escopoFile') as HTMLInputElement;
         if (fileInput) fileInput.value = '';
+        // Optionally reset level selection after upload? Or keep it? Keep for now.
+        // setSelectedLevel('');
 
 
     } catch (error) {
@@ -178,14 +192,37 @@ export default function SettingsPage() {
                 Upload do Escopo-Sequência
               </CardTitle>
               <CardDescription>
-                Faça o upload do arquivo <strong>.xlsx</strong> contendo os dados de disciplinas, anos, bimestres, habilidades, objetos de conhecimento e conteúdos.
+                Selecione o <strong>Nível de Ensino</strong> e faça o upload do arquivo <strong>.xlsx</strong> correspondente. O upload substituirá os dados existentes para o nível selecionado.
+                <br />
                 O nome da planilha (worksheet) será usado como o nome da Disciplina.
-                 As colunas esperadas são: <strong>Ano/Série</strong>, <strong>Bimestre</strong>, <strong>Habilidade</strong>, <strong>Objetos do Conhecimento</strong> (ou variação), e <strong>Conteúdo</strong>.
+                 As colunas esperadas são: <strong>Ano/Série</strong> (será lido apenas o número), <strong>Bimestre</strong> (será lido apenas o número), <strong>Habilidade</strong>, <strong>Objetos do Conhecimento</strong> (ou variação), e <strong>Conteúdo</strong>.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+               {/* Education Level Selection */}
+               <div className="space-y-2">
+                  <Label htmlFor="educationLevel" className="flex items-center gap-1">
+                    <GraduationCap className="h-4 w-4" /> Nível de Ensino *
+                  </Label>
+                  <Select
+                    value={selectedLevel}
+                    onValueChange={(value) => setSelectedLevel(value as EducationLevel)} // Cast value to EducationLevel
+                    disabled={isUploading}
+                  >
+                    <SelectTrigger id="educationLevel">
+                      <SelectValue placeholder="Selecione o nível de ensino do arquivo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {EDUCATION_LEVELS.map(level => (
+                        <SelectItem key={level} value={level}>{level}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+               </div>
+
+              {/* File Selection */}
               <div className="space-y-2">
-                <Label htmlFor="escopoFile">Selecionar Arquivo (.xlsx)</Label>
+                <Label htmlFor="escopoFile">Selecionar Arquivo (.xlsx) *</Label>
                 <Input
                   id="escopoFile"
                   type="file"
@@ -196,12 +233,14 @@ export default function SettingsPage() {
                 />
                  {selectedFile && <p className="text-sm text-muted-foreground mt-1">Arquivo selecionado: {selectedFile.name}</p>}
               </div>
+
+              {/* Upload Button */}
               <Button
                 onClick={handleUpload}
-                disabled={!selectedFile || isUploading}
+                disabled={!selectedFile || !selectedLevel || isUploading} // Disable if no file OR no level selected
                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
               >
-                {isUploading ? 'Processando...' : 'Fazer Upload e Processar'}
+                {isUploading ? `Processando para ${selectedLevel}...` : 'Fazer Upload e Substituir Dados'}
               </Button>
             </CardContent>
           </Card>
@@ -249,3 +288,4 @@ export default function SettingsPage() {
     </div>
   );
 }
+

@@ -1,11 +1,35 @@
+
 /**
- * @fileOverview Service for handling Escopo-Sequência data, including processing XLSX uploads and retrieving data.
+ * @fileOverview Service for handling Escopo-Sequência data, including processing XLSX uploads and retrieving data per education level.
  */
-// Removed 'use server'; directive
 
 import * as XLSX from 'xlsx';
 
-const ESCOPO_STORAGE_KEY = 'escopoSequenciaData';
+// Define Education Levels
+export const EDUCATION_LEVELS = [
+  "Anos Iniciais",
+  "Anos Finais",
+  "Ensino Médio",
+  "Ensino Médio Técnico - 2ª Série",
+  "Ensino Médio Técnico - 3ª Série",
+  "Ensino Médio Noturno",
+] as const;
+
+export type EducationLevel = typeof EDUCATION_LEVELS[number];
+
+// Base storage key, will be appended with the education level
+const ESCOPO_STORAGE_KEY_BASE = 'escopoSequenciaData_';
+
+/**
+ * Generates the specific localStorage key for a given education level.
+ * @param level - The education level.
+ * @returns The localStorage key string.
+ */
+const getStorageKeyForLevel = (level: EducationLevel): string => {
+    // Replace spaces and special characters for a cleaner key
+    const sanitizedLevel = level.replace(/[^a-zA-Z0-9]/g, '_');
+    return `${ESCOPO_STORAGE_KEY_BASE}${sanitizedLevel}`;
+}
 
 /**
  * Represents a data structure for a single row item within the scope sequence data,
@@ -14,9 +38,9 @@ const ESCOPO_STORAGE_KEY = 'escopoSequenciaData';
 export interface EscopoSequenciaItem {
   /** The discipline, derived from the worksheet name. */
   disciplina: string;
-  /** The year or series (e.g., "6º ano"). */
+  /** The year or series number (e.g., "6"). Extracted number only. */
   anoSerie: string;
-  /** The school term/bimester (e.g., "1º Bimestre"). */
+  /** The school term/bimester number (e.g., "1"). Extracted number only. */
   bimestre: string;
   /** The specific skill code/description (e.g., "(EF06MA07)"). */
   habilidade: string;
@@ -29,7 +53,20 @@ export interface EscopoSequenciaItem {
 }
 
 /**
+ * Extracts only the first sequence of digits from a string.
+ * @param value - The input string.
+ * @returns The extracted number as a string, or an empty string if no digits found.
+ */
+const extractNumber = (value: any): string => {
+    if (value === null || value === undefined) return '';
+    const str = String(value).trim();
+    const match = str.match(/\d+/); // Find the first sequence of digits
+    return match ? match[0] : '';
+};
+
+/**
  * Processes the uploaded Escopo-Sequência XLSX file data.
+ * Extracts only numbers for 'Ano/Série' and 'Bimestre'.
  *
  * @param fileData - The ArrayBuffer containing the XLSX file data.
  * @returns An array of EscopoSequenciaItem objects parsed from the file.
@@ -64,16 +101,14 @@ export function processEscopoFile(fileData: ArrayBuffer): EscopoSequenciaItem[] 
       objetivos: findHeader(headers, ['Objetivos', 'Objetivo']), // Optional original column
     };
 
-    // Check for mandatory columns
+    // Check for mandatory columns (excluding optional 'objetivos')
     const missingHeaders = Object.entries(headerMap)
-                                .filter(([key, value]) => !value && key !== 'objetivos') // 'objetivos' is optional now
+                                .filter(([key, value]) => !value && key !== 'objetivos')
                                 .map(([key]) => key);
 
     if (missingHeaders.length > 0) {
       console.error(`Sheet "${sheetName}" is missing required columns: ${missingHeaders.join(', ')}. Headers found: ${headers.join(', ')}`);
-      // Optionally throw an error or continue processing other sheets
-      // throw new Error(`Sheet "${sheetName}" is missing required columns: ${missingHeaders.join(', ')}`);
-       console.warn(`Skipping sheet "${sheetName}" due to missing columns: ${missingHeaders.join(', ')}`);
+      console.warn(`Skipping sheet "${sheetName}" due to missing columns: ${missingHeaders.join(', ')}`);
        return;
     }
 
@@ -89,8 +124,16 @@ export function processEscopoFile(fileData: ArrayBuffer): EscopoSequenciaItem[] 
       Object.entries(headerMap).forEach(([key, headerName]) => {
         if (headerName) {
           const colIndex = headers.indexOf(headerName);
+          let cellValue: any = null;
           if (colIndex !== -1 && row[colIndex] !== null && row[colIndex] !== undefined) {
-            (item as any)[key] = String(row[colIndex]).trim();
+            cellValue = row[colIndex];
+          }
+
+          // Apply specific processing for number extraction
+          if (key === 'anoSerie' || key === 'bimestre') {
+            (item as any)[key] = extractNumber(cellValue);
+          } else if (cellValue !== null) {
+            (item as any)[key] = String(cellValue).trim();
           } else {
              // Set default value or handle missing optional data
              if (key !== 'objetivos') {
@@ -100,11 +143,11 @@ export function processEscopoFile(fileData: ArrayBuffer): EscopoSequenciaItem[] 
         }
       });
 
-       // Validate that essential fields are present after processing the row
+       // Validate that essential fields (now with extracted numbers) are present after processing the row
        if (item.anoSerie && item.bimestre && item.habilidade && item.objetosDoConhecimento && item.conteudo) {
            allData.push(item as EscopoSequenciaItem);
        } else {
-            console.warn(`Skipping row ${i+1} in sheet "${sheetName}" due to missing essential data. Row:`, row);
+            console.warn(`Skipping row ${i+1} in sheet "${sheetName}" due to missing essential data after processing. Processed Item:`, item, "Original Row:", row);
        }
     }
   });
@@ -135,18 +178,24 @@ function findHeader(headers: string[], possibleNames: string[]): string | undefi
 
 
 /**
- * Saves the processed Escopo-Sequência data to localStorage.
+ * Saves the processed Escopo-Sequência data to localStorage for a specific education level,
+ * overwriting any existing data for that level.
  * Should only be called on the client-side.
  *
+ * @param level - The education level the data belongs to.
  * @param data - The array of EscopoSequenciaItem objects to save.
  */
-export function saveEscopoDataToStorage(data: EscopoSequenciaItem[]): void {
+export function saveEscopoDataToStorage(level: EducationLevel, data: EscopoSequenciaItem[]): void {
   if (typeof window !== 'undefined') {
+    const storageKey = getStorageKeyForLevel(level);
     try {
-      localStorage.setItem(ESCOPO_STORAGE_KEY, JSON.stringify(data));
-      console.log(`Saved ${data.length} escopo items to localStorage.`);
+      // Clear existing data first (optional, but matches requirement)
+      // localStorage.removeItem(storageKey); // Uncomment if explicit clearing is desired before setting
+
+      localStorage.setItem(storageKey, JSON.stringify(data));
+      console.log(`Saved ${data.length} escopo items for level "${level}" to localStorage key "${storageKey}".`);
     } catch (error) {
-      console.error("Error saving escopo data to localStorage:", error);
+      console.error(`Error saving escopo data for level "${level}" to localStorage:`, error);
       // Handle potential storage errors (e.g., quota exceeded)
     }
   } else {
@@ -155,64 +204,79 @@ export function saveEscopoDataToStorage(data: EscopoSequenciaItem[]): void {
 }
 
 /**
- * Retrieves the Escopo-Sequência data from localStorage.
+ * Retrieves the Escopo-Sequência data from localStorage for a specific education level.
  * Should only be called on the client-side.
  *
+ * @param level - The education level to retrieve data for.
  * @returns An array of EscopoSequenciaItem objects, or an empty array if not found or error occurs.
  */
-export function getEscopoDataFromStorage(): EscopoSequenciaItem[] {
+export function getEscopoDataFromStorage(level: EducationLevel): EscopoSequenciaItem[] {
   if (typeof window !== 'undefined') {
-    const storedData = localStorage.getItem(ESCOPO_STORAGE_KEY);
+    const storageKey = getStorageKeyForLevel(level);
+    const storedData = localStorage.getItem(storageKey);
     if (storedData) {
       try {
         const data = JSON.parse(storedData);
-         console.log(`Loaded ${data.length} escopo items from localStorage.`);
+         console.log(`Loaded ${data.length} escopo items for level "${level}" from localStorage key "${storageKey}".`);
         // Basic validation: check if it's an array
         return Array.isArray(data) ? data : [];
       } catch (error) {
-        console.error("Error parsing escopo data from localStorage:", error);
+        console.error(`Error parsing escopo data for level "${level}" from localStorage:`, error);
         return [];
       }
+    } else {
+         console.log(`No escopo data found in localStorage for level "${level}" (key: "${storageKey}").`);
     }
   }
   return [];
 }
 
 /**
- * Asynchronously retrieves the scope sequence data.
- * First tries to load from localStorage (client-side).
- * If not found locally, it could potentially fetch from a server endpoint in the future,
- * but currently returns an empty array if not in localStorage.
+ * Retrieves Escopo-Sequência data for ALL education levels from localStorage.
+ * Should only be called on the client-side.
  *
+ * @returns An object where keys are EducationLevels and values are arrays of EscopoSequenciaItem.
+ */
+export function getAllEscopoDataFromStorage(): { [key in EducationLevel]?: EscopoSequenciaItem[] } {
+    const allData: { [key in EducationLevel]?: EscopoSequenciaItem[] } = {};
+    if (typeof window !== 'undefined') {
+        EDUCATION_LEVELS.forEach(level => {
+            allData[level] = getEscopoDataFromStorage(level);
+        });
+    }
+    return allData;
+}
+
+
+/**
+ * Asynchronously retrieves the scope sequence data for a specific level.
+ * Currently, it only loads from localStorage (client-side).
+ *
+ * @param level - The education level to retrieve data for.
  * @returns A promise that resolves to an array of EscopoSequenciaItem objects.
  */
-export async function getEscopoSequenciaData(): Promise<EscopoSequenciaItem[]> {
-    // On the client-side, try loading from localStorage first.
+export async function getEscopoSequenciaData(level: EducationLevel): Promise<EscopoSequenciaItem[]> {
+    // On the client-side, try loading from localStorage.
     if (typeof window !== 'undefined') {
-        const localData = getEscopoDataFromStorage();
-        if (localData.length > 0) {
-        return localData;
-        }
+        return getEscopoDataFromStorage(level);
     }
 
-    // Placeholder: In a future version, this could fetch initial/default data from a server.
-    // For now, if not in localStorage, return empty.
-    console.log("No escopo data found in localStorage. Returning empty array.");
+    // Return empty array if not on client-side (or could fetch from server in future)
+    console.log(`Cannot fetch data for level "${level}" outside browser. Returning empty array.`);
     return [];
-
-    // Example of fetching from an API endpoint (if implemented later):
-    // try {
-    //   const response = await fetch('/api/escopo-data'); // Your API endpoint
-    //   if (!response.ok) {
-    //     throw new Error(`HTTP error! status: ${response.status}`);
-    //   }
-    //   const data = await response.json();
-    //   if (typeof window !== 'undefined') {
-    //     saveEscopoDataToStorage(data); // Cache fetched data locally
-    //   }
-    //   return data;
-    // } catch (error) {
-    //   console.error("Error fetching escopo data from API:", error);
-    //   return []; // Return empty on fetch error
-    // }
 }
+
+/**
+ * Asynchronously retrieves ALL scope sequence data.
+ * Currently, it only loads from localStorage (client-side).
+ *
+ * @returns A promise that resolves to an object containing data for all levels.
+ */
+export async function getAllEscopoSequenciaData(): Promise<{ [key in EducationLevel]?: EscopoSequenciaItem[] }> {
+     if (typeof window !== 'undefined') {
+        return getAllEscopoDataFromStorage();
+     }
+     console.log("Cannot fetch all data outside browser. Returning empty object.");
+     return {};
+}
+
