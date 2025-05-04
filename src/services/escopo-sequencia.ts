@@ -71,8 +71,8 @@ const POSSIBLE_HEADERS: { [key in keyof EscopoSequenciaItem]?: string[] } = {
     anoSerie: ['ANO/SÉRIE', 'Ano/Série', 'Ano', 'Série'],
     bimestre: ['BIMESTRE', 'Bimestre'],
     habilidade: ['HABILIDADE', 'Habilidade', 'Habilidades'],
-    objetosDoConhecimento: ['OBJETOS DO CONHECIMENTO', 'Objetos do Conhecimento', 'Objeto do Conhecimento', 'Objetos de Conhecimento', 'Objetos de conhecimento'], // Added 'Objetos de conhecimento'
-    conteudo: ['CONTEUDO', 'Conteúdo', 'Conteudos', 'Conteúdos'], // Added 'Conteúdos' based on error log
+    objetosDoConhecimento: ['OBJETOS DO CONHECIMENTO', 'Objetos do Conhecimento', 'Objeto do Conhecimento', 'Objetos de Conhecimento', 'Objetos de conhecimento'],
+    conteudo: ['CONTEUDO', 'Conteúdo', 'Conteudos', 'Conteúdos'],
     objetivos: ['OBJETIVOS', 'Objetivos', 'Objetivo'],
 };
 
@@ -169,7 +169,7 @@ function findAndMapHeaders(jsonData: any[][], sheetName: string, startRowIndex: 
 
 /**
  * Processes the uploaded Escopo-Sequência XLSX file data.
- * Dynamically finds the header row based on the EducationLevel.
+ * Dynamically finds the header row, starting from the first row.
  * Extracts only numbers for 'Ano/Série' and 'Bimestre'.
  * Ignores the sheet named "Índice".
  * Looks for variations in column headers defined in POSSIBLE_HEADERS.
@@ -183,9 +183,9 @@ export function processEscopoFile(fileData: ArrayBuffer, level: EducationLevel):
   const workbook = XLSX.read(fileData, { type: 'buffer' });
   const allData: EscopoSequenciaItem[] = [];
 
-  // Determine the starting row index for header search based on level (1-based index for logging)
-  const headerSearchStartRowAbsolute = level === "Anos Iniciais" ? 2 : 1; // Row 2 for Anos Iniciais, Row 1 for others
-  const headerSearchStartRowIndex = headerSearchStartRowAbsolute - 1; // 0-based index for array access
+  // Always start searching from the first row (1-based index for logging)
+  const headerSearchStartRowAbsolute = 1;
+  const headerSearchStartRowIndex = 0; // 0-based index for array access
 
   workbook.SheetNames.forEach((sheetName) => {
     const trimmedSheetName = sheetName.trim();
@@ -209,8 +209,8 @@ export function processEscopoFile(fileData: ArrayBuffer, level: EducationLevel):
      });
 
 
-    if (!jsonData || jsonData.length < headerSearchStartRowAbsolute) { // Need enough rows to reach the header search start
-      console.warn(`Skipping sheet "${trimmedSheetName}" due to insufficient data (less than ${headerSearchStartRowAbsolute} rows).`);
+    if (!jsonData || jsonData.length < headerSearchStartRowAbsolute) { // Need at least one row for header
+      console.warn(`Skipping sheet "${trimmedSheetName}" due to insufficient data (less than ${headerSearchStartRowAbsolute} row).`);
       return;
     }
 
