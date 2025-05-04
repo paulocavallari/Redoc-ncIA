@@ -64,15 +64,106 @@ const extractNumber = (value: any): string => {
     return match ? match[0] : '';
 };
 
+
+// --- Header Mapping & Finding Logic ---
+
+const POSSIBLE_HEADERS: { [key in keyof EscopoSequenciaItem]?: string[] } = {
+    anoSerie: ['ANO/SÉRIE', 'Ano/Série', 'Ano', 'Série'],
+    bimestre: ['BIMESTRE', 'Bimestre'],
+    habilidade: ['HABILIDADE', 'Habilidade', 'Habilidades'],
+    objetosDoConhecimento: ['OBJETOS DO CONHECIMENTO', 'Objetos do Conhecimento', 'Objeto do Conhecimento', 'Objetos de Conhecimento'],
+    conteudo: ['CONTEUDO', 'Conteúdo', 'Conteudos'],
+    objetivos: ['OBJETIVOS', 'Objetivos', 'Objetivo'], // Added Objetivos
+};
+
+const MANDATORY_KEYS: (keyof EscopoSequenciaItem)[] = ['anoSerie', 'bimestre', 'habilidade', 'objetosDoConhecimento', 'conteudo'];
+
+/**
+ * Finds the first matching header name from a list of possibilities (case-insensitive).
+ *
+ * @param headers - Array of header strings from the sheet.
+ * @param possibleNames - Array of possible header names to look for.
+ * @returns The matching header name found in the headers array (maintaining original casing), or undefined if none match.
+ */
+function findHeader(headers: string[], possibleNames: string[] | undefined): string | undefined {
+  if (!possibleNames) return undefined;
+  const lowerCaseHeaders = headers.map(h => h.toLowerCase());
+  for (const name of possibleNames) {
+    const lowerCaseName = name.toLowerCase();
+    const index = lowerCaseHeaders.indexOf(lowerCaseName);
+    if (index !== -1) {
+      return headers[index]; // Return the original casing from the sheet header
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Identifies the header row and maps column names to expected keys.
+ * @param jsonData - Data read from the sheet as array of arrays.
+ * @param sheetName - Name of the sheet being processed (for logging).
+ * @returns An object containing the mapped headers, the actual headers found, and the index of the header row, or null if no valid header row is found.
+ */
+function findAndMapHeaders(jsonData: any[][], sheetName: string): { headerMap: { [key in keyof EscopoSequenciaItem]?: string }, headers: string[], headerIndex: number } | null {
+    const HEADER_SEARCH_LIMIT = 5; // Look for header within the first 5 rows
+    let headerIndex = -1;
+    let headers: string[] = [];
+
+    for (let i = 0; i < Math.min(jsonData.length, HEADER_SEARCH_LIMIT); i++) {
+        const potentialHeaderRow = jsonData[i];
+        if (!potentialHeaderRow || potentialHeaderRow.length === 0) continue;
+
+        const potentialHeaders = potentialHeaderRow.map((h: any) => String(h || '').trim());
+        let foundMandatoryCount = 0;
+
+        MANDATORY_KEYS.forEach(key => {
+            if (findHeader(potentialHeaders, POSSIBLE_HEADERS[key])) {
+                foundMandatoryCount++;
+            }
+        });
+
+        // Consider it a header row if it contains at least 3 mandatory columns
+        if (foundMandatoryCount >= 3) {
+            headerIndex = i;
+            headers = potentialHeaders;
+            break;
+        }
+    }
+
+    if (headerIndex === -1) {
+        console.warn(`Could not identify a valid header row in sheet "${sheetName}" within the first ${HEADER_SEARCH_LIMIT} rows.`);
+        return null;
+    }
+
+    // Map headers to expected keys
+    const headerMap: { [key in keyof EscopoSequenciaItem]?: string } = {};
+     Object.keys(POSSIBLE_HEADERS).forEach(key => {
+        headerMap[key as keyof EscopoSequenciaItem] = findHeader(headers, POSSIBLE_HEADERS[key as keyof EscopoSequenciaItem]);
+    });
+
+
+    // Check for mandatory columns
+    const missingHeaders = MANDATORY_KEYS.filter(key => !headerMap[key]);
+    if (missingHeaders.length > 0) {
+      console.error(`Sheet "${sheetName}" (header row ${headerIndex + 1}) is missing required columns: ${missingHeaders.join(', ')}. Headers found: ${headers.filter(h => h).join(', ')}`);
+      console.warn(`Skipping sheet "${sheetName}" due to missing required columns.`);
+      return null; // Return null if mandatory headers are missing
+    }
+
+    return { headerMap, headers, headerIndex };
+}
+
+
 /**
  * Processes the uploaded Escopo-Sequência XLSX file data.
+ * Dynamically finds the header row.
  * Extracts only numbers for 'Ano/Série' and 'Bimestre'.
  * Ignores the sheet named "Índice".
- * Looks for variations in column headers.
+ * Looks for variations in column headers defined in POSSIBLE_HEADERS.
  *
  * @param fileData - The ArrayBuffer containing the XLSX file data.
  * @returns An array of EscopoSequenciaItem objects parsed from the file.
- * @throws Error if the file format is invalid or essential columns are missing in relevant sheets.
+ * @throws Error if the file format is invalid.
  */
 export function processEscopoFile(fileData: ArrayBuffer): EscopoSequenciaItem[] {
   const workbook = XLSX.read(fileData, { type: 'buffer' });
@@ -89,54 +180,38 @@ export function processEscopoFile(fileData: ArrayBuffer): EscopoSequenciaItem[] 
     const worksheet = workbook.Sheets[sheetName];
     if (!worksheet) return; // Skip if sheet is somehow invalid
 
-    const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 }); // Read as array of arrays
+    const jsonData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false }); // Read as array of arrays, skip blank rows
 
-    if (!jsonData || jsonData.length < 2) {
-      console.warn(`Skipping sheet "${sheetName}" due to insufficient data or header row.`);
-      return; // Skip empty or header-only sheets
+    if (!jsonData || jsonData.length < 1) { // Need at least one row (potentially header)
+      console.warn(`Skipping sheet "${sheetName}" due to insufficient data.`);
+      return;
     }
 
-    // Find header row index (assuming it's the first row)
-    const headerRow = jsonData[0];
-    const headers = headerRow.map((h: any) => String(h || '').trim());
-
-    // Map headers to expected keys, allowing for variations (case-insensitive matching)
-    const headerMap: { [key in keyof EscopoSequenciaItem]?: string } = {
-      anoSerie: findHeader(headers, ['ANO/SÉRIE', 'Ano/Série', 'Ano', 'Série']),
-      bimestre: findHeader(headers, ['BIMESTRE', 'Bimestre']),
-      habilidade: findHeader(headers, ['HABILIDADE', 'Habilidade', 'Habilidades']),
-      objetosDoConhecimento: findHeader(headers, ['OBJETOS DO CONHECIMENTO', 'Objetos do Conhecimento', 'Objeto do Conhecimento', 'Objetos de Conhecimento']),
-      conteudo: findHeader(headers, ['CONTEUDO', 'Conteúdo', 'Conteudos']),
-      objetivos: findHeader(headers, ['OBJETIVOS', 'Objetivos', 'Objetivo']), // Added Objetivos
-    };
-
-    // Check for mandatory columns (excluding optional 'objetivos')
-    const mandatoryKeys: (keyof EscopoSequenciaItem)[] = ['anoSerie', 'bimestre', 'habilidade', 'objetosDoConhecimento', 'conteudo'];
-    const missingHeaders = mandatoryKeys.filter(key => !headerMap[key]);
-
-
-    if (missingHeaders.length > 0) {
-      console.error(`Sheet "${sheetName}" is missing required columns: ${missingHeaders.join(', ')}. Headers found: ${headers.join(', ')}`);
-      console.warn(`Skipping sheet "${sheetName}" due to missing required columns.`);
-       return; // Stop processing this sheet if mandatory columns are missing
+     // Find the header row and map columns
+    const headerInfo = findAndMapHeaders(jsonData, sheetName);
+    if (!headerInfo) {
+      return; // Skip sheet if headers are invalid or not found
     }
+    const { headerMap, headers, headerIndex } = headerInfo;
 
-    // Process data rows
-    for (let i = 1; i < jsonData.length; i++) {
+
+    // Process data rows starting after the header row
+    for (let i = headerIndex + 1; i < jsonData.length; i++) {
       const row = jsonData[i];
-      if (!row || row.length === 0 || row.every((cell: any) => cell === null || cell === '' || String(cell).trim() === '')) {
-          continue; // Skip empty or effectively empty rows
-      }
+       // Skip if row is completely empty or doesn't seem like a valid data row
+       if (!row || row.length === 0 || row.every((cell: any) => cell === null || String(cell).trim() === '')) {
+            continue;
+       }
 
       const item: Partial<EscopoSequenciaItem> = { disciplina: trimmedSheetName }; // Discipline from sheet name
 
       Object.entries(headerMap).forEach(([key, headerName]) => {
-         // Check if headerName was found
+         // Check if headerName was found (it should have been validated in findAndMapHeaders for mandatory keys)
         if (headerName) {
             const colIndex = headers.indexOf(headerName);
             let cellValue: any = null;
-             // Ensure colIndex is valid and the cell has a value
-            if (colIndex !== -1 && row[colIndex] !== null && row[colIndex] !== undefined) {
+             // Ensure colIndex is valid and the cell has a value within the row length
+            if (colIndex !== -1 && colIndex < row.length && row[colIndex] !== null && row[colIndex] !== undefined) {
                 cellValue = row[colIndex];
             }
 
@@ -144,11 +219,11 @@ export function processEscopoFile(fileData: ArrayBuffer): EscopoSequenciaItem[] 
              const itemKey = key as keyof EscopoSequenciaItem;
              if (itemKey === 'anoSerie' || itemKey === 'bimestre') {
                  item[itemKey] = extractNumber(cellValue);
-             } else if (cellValue !== null) {
+             } else if (cellValue !== null) { // Check for null before converting to string
                  item[itemKey] = String(cellValue).trim();
              } else {
                  // Set default empty string for missing *mandatory* data in a row
-                 if (mandatoryKeys.includes(itemKey)) {
+                 if (MANDATORY_KEYS.includes(itemKey)) {
                      item[itemKey] = '';
                  }
                  // Optional 'objetivos' will remain undefined if cell is empty/null
@@ -157,7 +232,7 @@ export function processEscopoFile(fileData: ArrayBuffer): EscopoSequenciaItem[] 
       });
 
        // Validate that essential fields (now with extracted numbers) have values after processing the row
-        const hasEssentialData = mandatoryKeys.every(key => item[key] !== undefined && item[key] !== '');
+        const hasEssentialData = MANDATORY_KEYS.every(key => item[key] !== undefined && item[key] !== '');
 
        if (hasEssentialData) {
            allData.push(item as EscopoSequenciaItem);
@@ -169,26 +244,6 @@ export function processEscopoFile(fileData: ArrayBuffer): EscopoSequenciaItem[] 
 
   console.log(`Processed ${allData.length} items from the uploaded file.`);
   return allData;
-}
-
-
-/**
- * Finds the first matching header name from a list of possibilities (case-insensitive).
- *
- * @param headers - Array of header strings from the sheet.
- * @param possibleNames - Array of possible header names to look for.
- * @returns The matching header name found in the headers array (maintaining original casing), or undefined if none match.
- */
-function findHeader(headers: string[], possibleNames: string[]): string | undefined {
-  const lowerCaseHeaders = headers.map(h => h.toLowerCase());
-  for (const name of possibleNames) {
-    const lowerCaseName = name.toLowerCase();
-    const index = lowerCaseHeaders.indexOf(lowerCaseName);
-    if (index !== -1) {
-      return headers[index]; // Return the original casing from the sheet header
-    }
-  }
-  return undefined;
 }
 
 
