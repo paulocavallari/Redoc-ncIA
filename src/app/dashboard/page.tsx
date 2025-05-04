@@ -7,8 +7,9 @@ import DashboardLoadingSkeleton from './DashboardLoadingSkeleton'; // Import the
 export default function DashboardPage() {
   // It correctly wraps the Client Component (using useSearchParams) with Suspense
   return (
-    <Suspense fallback={<DashboardLoadingSkeleton />}>
+    <Suspense fallback={<DashboardLoadingSkeleton />} >
       <DashboardPageContent />
     </Suspense>
   );
 }
+
