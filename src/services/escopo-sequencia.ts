@@ -1,4 +1,5 @@
 
+
 /**
  * @fileOverview Service for handling Escopo-Sequência data, including processing XLSX uploads and retrieving data per education level.
  */
@@ -67,15 +68,17 @@ const extractNumber = (value: any): string => {
 
 // --- Header Mapping & Finding Logic ---
 
+// Updated possible headers based on user feedback and potential variations
 const POSSIBLE_HEADERS: { [key in keyof EscopoSequenciaItem]?: string[] } = {
     anoSerie: ['ANO/SÉRIE', 'Ano/Série', 'Ano', 'Série'],
     bimestre: ['BIMESTRE', 'Bimestre'],
     habilidade: ['HABILIDADE', 'Habilidade', 'Habilidades'],
     objetosDoConhecimento: ['OBJETOS DO CONHECIMENTO', 'Objetos do Conhecimento', 'Objeto do Conhecimento', 'Objetos de Conhecimento'],
     conteudo: ['CONTEUDO', 'Conteúdo', 'Conteudos'],
-    objetivos: ['OBJETIVOS', 'Objetivos', 'Objetivo'], // Added Objetivos
+    objetivos: ['OBJETIVOS', 'Objetivos', 'Objetivo'],
 };
 
+// Define the core mandatory keys corresponding to the required headers
 const MANDATORY_KEYS: (keyof EscopoSequenciaItem)[] = ['anoSerie', 'bimestre', 'habilidade', 'objetosDoConhecimento', 'conteudo'];
 
 /**
@@ -87,7 +90,7 @@ const MANDATORY_KEYS: (keyof EscopoSequenciaItem)[] = ['anoSerie', 'bimestre', '
  */
 function findHeader(headers: string[], possibleNames: string[] | undefined): string | undefined {
   if (!possibleNames) return undefined;
-  const lowerCaseHeaders = headers.map(h => h.toLowerCase());
+  const lowerCaseHeaders = headers.map(h => h ? h.toLowerCase() : ''); // Handle potential null/undefined headers
   for (const name of possibleNames) {
     const lowerCaseName = name.toLowerCase();
     const index = lowerCaseHeaders.indexOf(lowerCaseName);
@@ -102,16 +105,18 @@ function findHeader(headers: string[], possibleNames: string[] | undefined): str
  * Identifies the header row and maps column names to expected keys.
  * @param jsonData - Data read from the sheet as array of arrays.
  * @param sheetName - Name of the sheet being processed (for logging).
- * @returns An object containing the mapped headers, the actual headers found, and the index of the header row, or null if no valid header row is found.
+ * @returns An object containing the mapped headers, the actual headers found, and the index of the header row, or null if no valid header row is found or mandatory headers are missing.
  */
 function findAndMapHeaders(jsonData: any[][], sheetName: string): { headerMap: { [key in keyof EscopoSequenciaItem]?: string }, headers: string[], headerIndex: number } | null {
-    const HEADER_SEARCH_LIMIT = 5; // Look for header within the first 5 rows
+    const HEADER_SEARCH_LIMIT = 10; // Increase search limit slightly
     let headerIndex = -1;
     let headers: string[] = [];
+    const MIN_MANDATORY_FOUND_THRESHOLD = 3; // Require at least 3 mandatory headers to identify the row
 
     for (let i = 0; i < Math.min(jsonData.length, HEADER_SEARCH_LIMIT); i++) {
         const potentialHeaderRow = jsonData[i];
-        if (!potentialHeaderRow || potentialHeaderRow.length === 0) continue;
+        // Ensure it's an array and has some non-empty cells
+        if (!Array.isArray(potentialHeaderRow) || potentialHeaderRow.length === 0 || potentialHeaderRow.every(cell => cell === null || String(cell).trim() === '')) continue;
 
         const potentialHeaders = potentialHeaderRow.map((h: any) => String(h || '').trim());
         let foundMandatoryCount = 0;
@@ -122,34 +127,41 @@ function findAndMapHeaders(jsonData: any[][], sheetName: string): { headerMap: {
             }
         });
 
-        // Consider it a header row if it contains at least 3 mandatory columns
-        if (foundMandatoryCount >= 3) {
+        // Consider it a header row if it meets the threshold
+        if (foundMandatoryCount >= MIN_MANDATORY_FOUND_THRESHOLD) {
             headerIndex = i;
             headers = potentialHeaders;
+            console.log(`Identified header row at index ${headerIndex} in sheet "${sheetName}":`, headers);
             break;
         }
     }
 
     if (headerIndex === -1) {
-        console.warn(`Could not identify a valid header row in sheet "${sheetName}" within the first ${HEADER_SEARCH_LIMIT} rows.`);
+        console.warn(`Could not identify a valid header row containing at least ${MIN_MANDATORY_FOUND_THRESHOLD} mandatory columns in sheet "${sheetName}" within the first ${HEADER_SEARCH_LIMIT} rows.`);
         return null;
     }
 
     // Map headers to expected keys
     const headerMap: { [key in keyof EscopoSequenciaItem]?: string } = {};
+    let foundHeadersLog: string[] = [];
      Object.keys(POSSIBLE_HEADERS).forEach(key => {
-        headerMap[key as keyof EscopoSequenciaItem] = findHeader(headers, POSSIBLE_HEADERS[key as keyof EscopoSequenciaItem]);
+        const mappedHeader = findHeader(headers, POSSIBLE_HEADERS[key as keyof EscopoSequenciaItem]);
+        headerMap[key as keyof EscopoSequenciaItem] = mappedHeader;
+        if(mappedHeader) {
+            foundHeadersLog.push(`${key}:'${mappedHeader}'`);
+        }
     });
 
-
-    // Check for mandatory columns
+    // Check for mandatory columns AFTER mapping
     const missingHeaders = MANDATORY_KEYS.filter(key => !headerMap[key]);
     if (missingHeaders.length > 0) {
-      console.error(`Sheet "${sheetName}" (header row ${headerIndex + 1}) is missing required columns: ${missingHeaders.join(', ')}. Headers found: ${headers.filter(h => h).join(', ')}`);
+      // Improved error logging
+      console.error(`Sheet "${sheetName}" (header row ${headerIndex + 1}) is missing required columns: ${missingHeaders.join(', ')}. Headers Found: [${foundHeadersLog.join(', ')}]. Full Row: [${headers.join(', ')}]`);
       console.warn(`Skipping sheet "${sheetName}" due to missing required columns.`);
       return null; // Return null if mandatory headers are missing
     }
 
+    console.log(`Successfully mapped headers for sheet "${sheetName}": [${foundHeadersLog.join(', ')}]`);
     return { headerMap, headers, headerIndex };
 }
 
@@ -178,17 +190,20 @@ export function processEscopoFile(fileData: ArrayBuffer): EscopoSequenciaItem[] 
     }
 
     const worksheet = workbook.Sheets[sheetName];
-    if (!worksheet) return; // Skip if sheet is somehow invalid
+    if (!worksheet) {
+        console.warn(`Skipping invalid or empty sheet "${sheetName}".`);
+        return; // Skip if sheet is somehow invalid
+    }
 
     const jsonData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false }); // Read as array of arrays, skip blank rows
 
     if (!jsonData || jsonData.length < 1) { // Need at least one row (potentially header)
-      console.warn(`Skipping sheet "${sheetName}" due to insufficient data.`);
+      console.warn(`Skipping sheet "${sheetName}" due to insufficient data (no rows found).`);
       return;
     }
 
      // Find the header row and map columns
-    const headerInfo = findAndMapHeaders(jsonData, sheetName);
+    const headerInfo = findAndMapHeaders(jsonData, trimmedSheetName); // Use trimmed name for consistency
     if (!headerInfo) {
       return; // Skip sheet if headers are invalid or not found
     }
@@ -198,46 +213,54 @@ export function processEscopoFile(fileData: ArrayBuffer): EscopoSequenciaItem[] 
     // Process data rows starting after the header row
     for (let i = headerIndex + 1; i < jsonData.length; i++) {
       const row = jsonData[i];
-       // Skip if row is completely empty or doesn't seem like a valid data row
-       if (!row || row.length === 0 || row.every((cell: any) => cell === null || String(cell).trim() === '')) {
+       // Skip if row is completely empty or doesn't seem like a valid data row based on number of columns
+       if (!Array.isArray(row) || row.length === 0 || row.every((cell: any) => cell === null || String(cell).trim() === '')) {
+            console.log(`Skipping empty row ${i + 1} in sheet "${trimmedSheetName}".`);
             continue;
        }
 
       const item: Partial<EscopoSequenciaItem> = { disciplina: trimmedSheetName }; // Discipline from sheet name
 
       Object.entries(headerMap).forEach(([key, headerName]) => {
-         // Check if headerName was found (it should have been validated in findAndMapHeaders for mandatory keys)
+         // headerName should exist for all mapped keys, especially mandatory ones (checked in findAndMapHeaders)
         if (headerName) {
             const colIndex = headers.indexOf(headerName);
             let cellValue: any = null;
-             // Ensure colIndex is valid and the cell has a value within the row length
-            if (colIndex !== -1 && colIndex < row.length && row[colIndex] !== null && row[colIndex] !== undefined) {
+             // Check if the column index is valid and the cell exists in the current row
+            if (colIndex !== -1 && colIndex < row.length) {
                 cellValue = row[colIndex];
+            } else if (colIndex !== -1) {
+                // Cell doesn't exist for this row (ragged data), treat as null
+                cellValue = null;
+                 // console.warn(`Row ${i + 1} in sheet "${trimmedSheetName}" has fewer columns than header. Missing value for '${headerName}'.`);
             }
 
              // Apply specific processing
              const itemKey = key as keyof EscopoSequenciaItem;
              if (itemKey === 'anoSerie' || itemKey === 'bimestre') {
                  item[itemKey] = extractNumber(cellValue);
-             } else if (cellValue !== null) { // Check for null before converting to string
+             } else if (cellValue !== null && cellValue !== undefined) { // Explicitly check for null/undefined
                  item[itemKey] = String(cellValue).trim();
              } else {
                  // Set default empty string for missing *mandatory* data in a row
                  if (MANDATORY_KEYS.includes(itemKey)) {
                      item[itemKey] = '';
+                      console.warn(`Row ${i + 1} in sheet "${trimmedSheetName}" has empty/null value for mandatory column '${headerName}'. Setting empty string.`);
                  }
                  // Optional 'objetivos' will remain undefined if cell is empty/null
              }
         }
       });
 
-       // Validate that essential fields (now with extracted numbers) have values after processing the row
+       // Validate that essential fields have non-empty values after processing the row
         const hasEssentialData = MANDATORY_KEYS.every(key => item[key] !== undefined && item[key] !== '');
 
        if (hasEssentialData) {
            allData.push(item as EscopoSequenciaItem);
        } else {
-            console.warn(`Skipping row ${i+1} in sheet "${sheetName}" due to missing essential data after processing. Processed Item:`, item, "Original Row:", row);
+            // Log skipped rows with more context
+            const missingFields = MANDATORY_KEYS.filter(key => item[key] === undefined || item[key] === '').join(', ');
+            console.warn(`Skipping row ${i+1} in sheet "${trimmedSheetName}" due to missing/empty essential data after processing. Missing fields: [${missingFields}]. Processed Item:`, JSON.stringify(item), "Original Row:", JSON.stringify(row));
        }
     }
   });
@@ -295,7 +318,7 @@ export function getEscopoDataFromStorage(level: EducationLevel): EscopoSequencia
         return [];
       }
     } else {
-         console.log(`No escopo data found in localStorage for level "${level}" (key: "${storageKey}").`);
+         // console.log(`No escopo data found in localStorage for level "${level}" (key: "${storageKey}").`); // Less verbose logging
     }
   }
   return [];
@@ -332,7 +355,7 @@ export async function getEscopoSequenciaData(level: EducationLevel): Promise<Esc
     }
 
     // Return empty array if not on client-side (or could fetch from server in future)
-    console.log(`Cannot fetch data for level "${level}" outside browser. Returning empty array.`);
+    console.warn(`Cannot fetch data for level "${level}" outside browser. Returning empty array.`);
     return [];
 }
 
@@ -346,11 +369,10 @@ export async function getAllEscopoSequenciaData(): Promise<{ [key in EducationLe
      if (typeof window !== 'undefined') {
         return getAllEscopoDataFromStorage();
      }
-     console.log("Cannot fetch all data outside browser. Returning empty object.");
+     console.warn("Cannot fetch all data outside browser. Returning empty object.");
      return {};
 }
 
-// Add this function if it doesn't exist, or ensure it's correctly implemented
 /**
  * Clears the Escopo-Sequência data from localStorage for a specific education level.
  * Should only be called on the client-side.
