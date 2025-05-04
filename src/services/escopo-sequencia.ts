@@ -1,7 +1,7 @@
 /**
  * @fileOverview Service for handling Escopo-Sequência data, including processing XLSX uploads and retrieving data.
  */
-'use server'; // Mark functions potentially callable from Server Components/Actions
+// Removed 'use server'; directive
 
 import * as XLSX from 'xlsx';
 
