@@ -308,42 +308,26 @@ function DashboardPageContent() {
 
   // Function to convert Markdown (used in AI response) to HTML
   const markdownToHtml = (markdown: string): string => {
-      try {
-        // Basic sanitization
-        const sanitizedMarkdown = markdown
-            .replace(/<script.*?>.*?<\/script>/gis, '')
-            .replace(/ on\w+="[^"]*"/g, '');
+       try {
+           // Basic sanitization - This is very basic and might not cover all security cases.
+           // Consider a more robust sanitizer like DOMPurify if handling untrusted input.
+           const sanitizedMarkdown = markdown
+               .replace(/<script.*?>.*?<\/script>/gis, '') // Remove script tags
+               .replace(/ on\w+="[^"]*"/g, ''); // Remove on* event handlers
 
-        // Configure marked
-        const renderer = new marked.Renderer();
-        // Customize heading rendering for consistent spacing/styling in editor
-        renderer.heading = (text, level) => {
-            const escapedText = text.toLowerCase().replace(/[^\w]+/g, '-');
-            return `<h${level} id="${escapedText}" class="mt-4 mb-2 font-semibold">${text}</h${level}>\n`;
-        };
-        // Customize list rendering for better spacing
-        renderer.list = (body, ordered) => {
-            const tag = ordered ? 'ol' : 'ul';
-            // Add margin bottom to lists
-            return `<${tag} class="mb-3 pl-6 list-${ordered ? 'decimal' : 'disc'}">${body}</${tag}>\n`;
-        };
-        renderer.listitem = (text) => {
-            // Add margin bottom to list items
-            return `<li class="mb-1">${text}</li>\n`;
-        };
-        // Customize paragraph rendering - simplified to avoid .includes error
-        renderer.paragraph = (text) => {
-           // The 'text' here is the raw text content, not HTML. Marked handles paragraph wrapping.
-           // Add margin bottom to paragraphs.
-           return `<p class="mb-2">${text}</p>\n`;
-        };
+           // Configure marked - Use defaults for broader compatibility with editor
+           marked.setOptions({
+               gfm: true, // Enable GitHub Flavored Markdown
+               breaks: true, // Convert single line breaks to <br>
+               // Note: We removed custom renderers here. The 'prose' class in Tiptap handles styling.
+           });
 
-        return marked.parse(sanitizedMarkdown, { renderer, breaks: true, gfm: true });
-      } catch (error) {
-          console.error("Error converting markdown to HTML:", error);
-          return `<p><strong>Erro ao processar o plano recebido.</strong> Por favor, tente gerar novamente.</p><p><small>Detalhe técnico: ${error instanceof Error ? error.message : String(error)}</small></p>`;
-      }
-  };
+           return marked.parse(sanitizedMarkdown);
+       } catch (error) {
+           console.error("Error converting markdown to HTML:", error);
+           return `<p><strong>Erro ao processar o plano recebido.</strong> Por favor, tente gerar novamente.</p><p><small>Detalhe técnico: ${error instanceof Error ? error.message : String(error)}</small></p>`;
+       }
+   };
 
 
   const handleGeneratePlan = async () => {
