@@ -1,4 +1,3 @@
-
 /**
  * @fileOverview Service for handling Escopo-Sequência data, including processing XLSX uploads and retrieving data per education level.
  */
@@ -73,7 +72,7 @@ const POSSIBLE_HEADERS: { [key in keyof EscopoSequenciaItem]?: string[] } = {
     bimestre: ['BIMESTRE', 'Bimestre'],
     habilidade: ['HABILIDADE', 'Habilidade', 'Habilidades'],
     objetosDoConhecimento: ['OBJETOS DO CONHECIMENTO', 'Objetos do Conhecimento', 'Objeto do Conhecimento', 'Objetos de Conhecimento'],
-    conteudo: ['CONTEUDO', 'Conteúdo', 'Conteudos'],
+    conteudo: ['CONTEUDO', 'Conteúdo', 'Conteudos', 'Conteúdos'], // Added 'Conteúdos' based on error log
     objetivos: ['OBJETIVOS', 'Objetivos', 'Objetivo'],
 };
 
@@ -104,12 +103,13 @@ function findHeader(headers: string[], possibleNames: string[] | undefined): str
  * Identifies the header row and maps column names to expected keys.
  * @param jsonData - Data read from the sheet as array of arrays.
  * @param sheetName - Name of the sheet being processed (for logging).
- * @param startRowIndex - The row index to start searching for headers (0-based).
- * @returns An object containing the mapped headers, the actual headers found, and the index of the header row, or null if no valid header row is found or mandatory headers are missing.
+ * @param startRowIndex - The row index to start searching for headers (relative to jsonData).
+ * @param absoluteStartRowIndex - The original row index in the Excel sheet (1-based, for logging).
+ * @returns An object containing the mapped headers, the actual headers found, and the index of the header row (relative to jsonData), or null if no valid header row is found or mandatory headers are missing.
  */
-function findAndMapHeaders(jsonData: any[][], sheetName: string, startRowIndex: number): { headerMap: { [key in keyof EscopoSequenciaItem]?: string }, headers: string[], headerIndex: number } | null {
+function findAndMapHeaders(jsonData: any[][], sheetName: string, startRowIndex: number, absoluteStartRowIndex: number): { headerMap: { [key in keyof EscopoSequenciaItem]?: string }, headers: string[], headerIndex: number } | null {
     const HEADER_SEARCH_LIMIT = 10; // Search up to 10 rows from the start index
-    let headerIndex = -1;
+    let headerIndex = -1; // Relative index within jsonData
     let headers: string[] = [];
     const MIN_MANDATORY_FOUND_THRESHOLD = 3; // Require at least 3 mandatory headers to identify the row
 
@@ -129,15 +129,15 @@ function findAndMapHeaders(jsonData: any[][], sheetName: string, startRowIndex: 
 
         // Consider it a header row if it meets the threshold
         if (foundMandatoryCount >= MIN_MANDATORY_FOUND_THRESHOLD) {
-            headerIndex = i;
+            headerIndex = i; // Relative index
             headers = potentialHeaders;
-            console.log(`Identified header row at index ${headerIndex} (row ${headerIndex + 1} in sheet) in sheet "${sheetName}":`, headers);
+            console.log(`Identified header row at relative index ${headerIndex} (row ${absoluteStartRowIndex + headerIndex} in sheet) in sheet "${sheetName}":`, headers);
             break;
         }
     }
 
     if (headerIndex === -1) {
-        console.warn(`Could not identify a valid header row containing at least ${MIN_MANDATORY_FOUND_THRESHOLD} mandatory columns in sheet "${sheetName}" starting from row ${startRowIndex + 1} within the search limit.`);
+        console.warn(`Could not identify a valid header row containing at least ${MIN_MANDATORY_FOUND_THRESHOLD} mandatory columns in sheet "${sheetName}" starting from row ${absoluteStartRowIndex} within the search limit.`);
         return null;
     }
 
@@ -154,9 +154,10 @@ function findAndMapHeaders(jsonData: any[][], sheetName: string, startRowIndex: 
 
     // Check for mandatory columns AFTER mapping
     const missingHeaders = MANDATORY_KEYS.filter(key => !headerMap[key]);
+    const headerRowNumberInSheet = absoluteStartRowIndex + headerIndex;
     if (missingHeaders.length > 0) {
       // Improved error logging
-      console.error(`Sheet "${sheetName}" (header row ${headerIndex + 1}) is missing required columns: ${missingHeaders.join(', ')}. Possible headers looked for: ${MANDATORY_KEYS.map(k => `[${k}: ${POSSIBLE_HEADERS[k]?.join('/')}]`).join(' ')}. Headers Found in Row: [${headers.join(', ')}]`);
+      console.error(`Sheet "${sheetName}" (header row ${headerRowNumberInSheet}) is missing required columns: ${missingHeaders.join(', ')}. Possible headers looked for: ${MANDATORY_KEYS.map(k => `[${k}: ${POSSIBLE_HEADERS[k]?.join('/')}]`).join(' ')}. Headers Found in Row: [${headers.join(', ')}]`);
       console.warn(`Skipping sheet "${sheetName}" due to missing required columns.`);
       return null; // Return null if mandatory headers are missing
     }
@@ -182,8 +183,9 @@ export function processEscopoFile(fileData: ArrayBuffer, level: EducationLevel):
   const workbook = XLSX.read(fileData, { type: 'buffer' });
   const allData: EscopoSequenciaItem[] = [];
 
-  // Determine the starting row index for header search based on level
-  const headerSearchStartRow = level === "Anos Iniciais" ? 1 : 0; // 0-based index (row 1 or row 2)
+  // Determine the starting row index for header search based on level (1-based index for logging)
+  const headerSearchStartRowAbsolute = level === "Anos Iniciais" ? 2 : 1; // Row 2 for Anos Iniciais, Row 1 for others
+  const headerSearchStartRowIndex = headerSearchStartRowAbsolute - 1; // 0-based index for array access
 
   workbook.SheetNames.forEach((sheetName) => {
     const trimmedSheetName = sheetName.trim();
@@ -199,34 +201,35 @@ export function processEscopoFile(fileData: ArrayBuffer, level: EducationLevel):
         return; // Skip if sheet is somehow invalid
     }
 
-    // Attempt to determine the range of the sheet to avoid reading excessive empty cells
-    const range = XLSX.utils.decode_range(worksheet['!ref'] || "A1:Z1000"); // Use "!ref" or fallback
-    const jsonData: any[][] = XLSX.utils.sheet_to_json(worksheet, {
-        header: 1,
-        blankrows: false,
-        // Adjust range based on header search start row
-        range: `${XLSX.utils.encode_col(range.s.c)}${range.s.r + 1 + headerSearchStartRow}:${XLSX.utils.encode_col(range.e.c)}${range.e.r + 1}`
+    // Read ALL data from the sheet first, then find headers
+     const jsonData: any[][] = XLSX.utils.sheet_to_json(worksheet, {
+         header: 1,
+         blankrows: false, // Keep blankrows false, handle empty checks later
+         defval: null, // Ensure empty cells are represented as null
      });
 
-    if (!jsonData || jsonData.length < 1) { // Need at least one row (potentially header)
-      console.warn(`Skipping sheet "${trimmedSheetName}" due to insufficient data (no rows found starting from search row ${headerSearchStartRow + 1}).`);
+
+    if (!jsonData || jsonData.length < headerSearchStartRowAbsolute) { // Need enough rows to reach the header search start
+      console.warn(`Skipping sheet "${trimmedSheetName}" due to insufficient data (less than ${headerSearchStartRowAbsolute} rows).`);
       return;
     }
 
      // Find the header row and map columns, starting from the specified index
-    const headerInfo = findAndMapHeaders(jsonData, trimmedSheetName, 0); // Pass 0 here, as jsonData starts from the adjusted range
+    // Pass the 0-based index and the 1-based index for logging
+    const headerInfo = findAndMapHeaders(jsonData, trimmedSheetName, headerSearchStartRowIndex, headerSearchStartRowAbsolute);
 
     if (!headerInfo) {
       return; // Skip sheet if headers are invalid or not found
     }
-    // headerIndex here is relative to the start of jsonData (which already skipped rows if needed)
+    // headerIndex here is relative to the start of jsonData
     const { headerMap, headers, headerIndex } = headerInfo;
+    const actualDataStartIndex = headerIndex + 1; // Data starts in the row immediately after the header
 
 
     // Process data rows starting after the header row within jsonData
-    for (let i = headerIndex + 1; i < jsonData.length; i++) {
+    for (let i = actualDataStartIndex; i < jsonData.length; i++) {
       const row = jsonData[i];
-       // Skip if row is completely empty or doesn't seem like a valid data row based on number of columns
+       // Skip if row is completely empty or doesn't seem like a valid data row
        if (!Array.isArray(row) || row.length === 0 || row.every((cell: any) => cell === null || String(cell).trim() === '')) {
             continue;
        }
@@ -239,32 +242,40 @@ export function processEscopoFile(fileData: ArrayBuffer, level: EducationLevel):
             let cellValue: any = null;
             if (colIndex !== -1 && colIndex < row.length) {
                 cellValue = row[colIndex];
-            } else if (colIndex !== -1) {
-                cellValue = null;
             }
 
              const itemKey = key as keyof EscopoSequenciaItem;
              if (itemKey === 'anoSerie' || itemKey === 'bimestre') {
                  item[itemKey] = extractNumber(cellValue);
              } else if (cellValue !== null && cellValue !== undefined) {
-                 item[itemKey] = String(cellValue).trim();
+                 // Trim string values
+                 item[itemKey] = typeof cellValue === 'string' ? cellValue.trim() : String(cellValue);
              } else {
+                 // Assign empty string for mandatory fields if cell is empty/null/undefined
                  if (MANDATORY_KEYS.includes(itemKey)) {
                      item[itemKey] = '';
                  }
+                 // Optional fields remain undefined if cell is empty
              }
         }
       });
 
-       const hasEssentialData = MANDATORY_KEYS.every(key => item[key] !== undefined && item[key] !== '');
+       // Validate that all mandatory keys have non-empty values after processing
+       const hasEssentialData = MANDATORY_KEYS.every(key => {
+           const value = item[key];
+           return value !== undefined && value !== null && String(value).trim() !== '';
+       });
 
        if (hasEssentialData) {
            allData.push(item as EscopoSequenciaItem);
+       } else {
+           // Optionally log rows that are skipped due to missing essential data
+            // console.warn(`Skipping row ${i + 1} in sheet "${trimmedSheetName}" due to missing essential data.`);
        }
     }
   });
 
-  console.log(`Processed ${allData.length} items from the uploaded file for level "${level}".`);
+  console.log(`Processed ${allData.length} valid items from the uploaded file for level "${level}".`);
   return allData;
 }
 
