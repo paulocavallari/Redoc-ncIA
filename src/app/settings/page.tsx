@@ -99,8 +99,7 @@ export default function SettingsPage() {
                 title: "Upload Concluído",
                 description: `Arquivo "${selectedFile.name}" processado para ${selectedLevel}. ${processedData.length} itens carregados. Os dados anteriores para este nível foram substituídos.`,
             });
-             // Dispatch event to notify dashboard to reload data
-             window.dispatchEvent(new CustomEvent('escopoDataUpdated'));
+             // Dispatch event to notify dashboard to reload data - This should already be handled within saveEscopoDataToStorage
 
         } else {
              toast({
@@ -194,8 +193,8 @@ export default function SettingsPage() {
               <CardDescription>
                 Selecione o <strong>Nível de Ensino</strong> e faça o upload do arquivo <strong>.xlsx</strong> correspondente. O upload substituirá os dados existentes para o nível selecionado.
                 <br />
-                O nome da planilha (worksheet) será usado como o nome da Disciplina.
-                 As colunas esperadas são: <strong>Ano/Série</strong> (será lido apenas o número), <strong>Bimestre</strong> (será lido apenas o número), <strong>Habilidade</strong>, <strong>Objetos do Conhecimento</strong> (ou variação), e <strong>Conteúdo</strong>.
+                O nome da planilha (worksheet) será usado como o nome da Disciplina (ignore a planilha "Índice").
+                 As colunas esperadas (podem ter variações de nome) são: <strong>ANO/SÉRIE</strong> (será lido apenas o número), <strong>BIMESTRE</strong> (será lido apenas o número), <strong>HABILIDADE</strong>, <strong>OBJETOS DO CONHECIMENTO</strong>, <strong>CONTEUDO</strong>, e opcionalmente <strong>OBJETIVOS</strong>.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -288,4 +287,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-
