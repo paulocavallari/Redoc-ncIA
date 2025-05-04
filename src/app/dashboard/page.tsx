@@ -1,8 +1,9 @@
+
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react'; // Added Suspense
 import { useAuth } from '@/contexts/AuthContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation'; // Import useSearchParams
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Settings, LogOut, BookOpenCheck, GraduationCap, BookCopy, Target, ListChecks, MessageSquare, Bot, Clock, CalendarDays, Layers, Paperclip, AlertTriangle, Library, Save, List } from 'lucide-react';
+import { Settings, LogOut, BookOpenCheck, GraduationCap, BookCopy, Target, ListChecks, MessageSquare, Bot, Clock, CalendarDays, Layers, Paperclip, AlertTriangle, Library, Save, List, RotateCcw, UploadCloud } from 'lucide-react'; // Added RotateCcw, UploadCloud
 import {
     getAllEscopoDataFromStorage,
     type EscopoSequenciaItem,
@@ -21,12 +22,12 @@ import {
 } from '@/services/escopo-sequencia';
 import { generateLessonPlan, type GenerateLessonPlanInput } from '@/ai/flows/generate-lesson-plan';
 import { suggestAdditionalContent, type SuggestAdditionalContentInput } from '@/ai/flows/suggest-additional-content';
-import { savePlan, type SavedPlanDetails } from '@/services/saved-plans';
+import { savePlan, updatePlan, getPlanById, type SavedPlanDetails, type SavedPlan } from '@/services/saved-plans'; // Import updatePlan, getPlanById, SavedPlan
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from "@/hooks/use-toast";
-import RichTextEditor from '@/components/editor/RichTextEditor'; // Import the editor
-import { marked } from 'marked'; // Import marked for markdown to HTML conversion
+import RichTextEditor from '@/components/editor/RichTextEditor';
+import { marked } from 'marked';
 
 // Duration options
 const aulaDuracaoOptions: string[] = [
@@ -39,15 +40,21 @@ const aulaDuracaoNoturnoOptions: string[] = [
     '2 aulas Noturno (80 min)',
 ];
 
-export default function DashboardPage() {
-  const { user, logout, isLoading: authLoading } = useAuth();
+// Wrapper component to use useSearchParams
+function DashboardPageContent() {
+  const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams(); // Hook to read query params
   const { toast } = useToast();
+
+  const planIdToEdit = searchParams.get('planId'); // Get planId from URL
 
   const [allEscopoData, setAllEscopoData] = useState<{ [key in EducationLevel]?: EscopoSequenciaItem[] }>({});
   const [loadingData, setLoadingData] = useState(true);
+  const [loadingPlanToEdit, setLoadingPlanToEdit] = useState(false); // State for loading existing plan
   const [showDataMissingAlert, setShowDataMissingAlert] = useState(false);
   const [missingLevels, setMissingLevels] = useState<EducationLevel[]>([]);
+  const [currentEditingPlan, setCurrentEditingPlan] = useState<SavedPlan | null>(null); // State for the plan being edited
 
   // Form State
   const [selectedLevel, setSelectedLevel] = useState<EducationLevel | ''>('');
@@ -62,17 +69,18 @@ export default function DashboardPage() {
   const [selectedMaterialFile, setSelectedMaterialFile] = useState<File | null>(null);
   const [readingFile, setReadingFile] = useState(false);
   const [generatingPlan, setGeneratingPlan] = useState(false);
-  const [editablePlanContent, setEditablePlanContent] = useState<string>(''); // State for the editor content (HTML)
+  const [editablePlanContent, setEditablePlanContent] = useState<string>('');
   const [suggestingContent, setSuggestingContent] = useState(false);
   const [suggestedContent, setSuggestedContent] = useState<string[]>([]);
   const [isSavingPlan, setIsSavingPlan] = useState(false);
-  const [isPlanGenerated, setIsPlanGenerated] = useState(false); // Track if a plan has been generated
+  const [isPlanGeneratedOrLoaded, setIsPlanGeneratedOrLoaded] = useState(false); // Track if a plan is generated or loaded
 
   // Get the relevant data based on the selected level
   const currentLevelData = useMemo(() => {
     return selectedLevel ? allEscopoData[selectedLevel] ?? [] : [];
   }, [selectedLevel, allEscopoData]);
 
+  // --- Authentication and Data Loading Effects ---
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login');
@@ -84,28 +92,76 @@ export default function DashboardPage() {
       setLoadingData(true);
       const data = getAllEscopoDataFromStorage();
       setAllEscopoData(data);
-       const hasAnyData = EDUCATION_LEVELS.some(level => data[level] && data[level]!.length > 0);
-       const levelsWithoutData = EDUCATION_LEVELS.filter(level => !data[level] || data[level]!.length === 0);
-       setMissingLevels(levelsWithoutData);
-       setShowDataMissingAlert(!hasAnyData && (user?.username === 'admin' || user?.username !== 'admin'));
-       setLoadingData(false);
+      const hasAnyData = EDUCATION_LEVELS.some(level => data[level] && data[level]!.length > 0);
+      const levelsWithoutData = EDUCATION_LEVELS.filter(level => !data[level] || data[level]!.length === 0);
+      setMissingLevels(levelsWithoutData);
+      setShowDataMissingAlert(!hasAnyData); // Show if NO data for ANY level
+      setLoadingData(false);
     };
 
     if (typeof window !== 'undefined') {
       loadData();
-       window.addEventListener('escopoDataUpdated', loadData);
-       return () => window.removeEventListener('escopoDataUpdated', loadData);
+      window.addEventListener('escopoDataUpdated', loadData);
+      return () => window.removeEventListener('escopoDataUpdated', loadData);
     } else {
       setLoadingData(false);
-       setShowDataMissingAlert(true);
+      setShowDataMissingAlert(true);
     }
-  }, [user]);
+  }, []); // Run only once on mount
+
+  // --- Effect to load plan data if planId exists ---
+  useEffect(() => {
+    if (planIdToEdit && user) {
+      const loadPlan = async () => {
+        setLoadingPlanToEdit(true);
+        setGeneratingPlan(true); // Use generatingPlan state to disable form while loading
+        try {
+          const plan = await getPlanById(user.id, planIdToEdit);
+          if (plan) {
+            setCurrentEditingPlan(plan);
+            // Pre-fill form fields from the loaded plan
+            setSelectedLevel(plan.level);
+            setYearSeries(plan.yearSeries.match(/\d+/)?.[0] || ''); // Extract number
+            setSubject(plan.subject);
+            setBimestre(plan.bimestre);
+            setKnowledgeObject(plan.knowledgeObject);
+            setSelectedContents(plan.contents);
+            setSelectedSkills(plan.skills);
+            setAulaDuracao(plan.duration);
+            setAdditionalInstructions(plan.additionalInstructions || '');
+            setEditablePlanContent(plan.generatedPlan); // Load HTML content into editor
+            setIsPlanGeneratedOrLoaded(true); // Mark as loaded
+            toast({ title: "Plano Carregado", description: "Plano carregado para edição." });
+          } else {
+            toast({ title: "Erro", description: "Plano não encontrado ou você não tem permissão para editá-lo.", variant: "destructive" });
+            router.replace('/dashboard'); // Redirect if plan not found
+          }
+        } catch (error) {
+          console.error("Error loading plan for editing:", error);
+          toast({ title: "Erro ao Carregar", description: "Não foi possível carregar o plano para edição.", variant: "destructive" });
+          router.replace('/dashboard'); // Redirect on error
+        } finally {
+          setLoadingPlanToEdit(false);
+          setGeneratingPlan(false); // Re-enable form
+        }
+      };
+      loadPlan();
+    } else {
+      // Reset if no planId or navigating away from edit
+      resetFields(false); // Don't reset level if just navigating back
+    }
+    // Dependency on planIdToEdit and user
+  }, [planIdToEdit, user, router, toast]);
+
 
   // --- Derived options based on selections ---
    const availableYears = useMemo(() => {
      if (!selectedLevel || !currentLevelData.length) return [];
-     const sortedYears = [...new Set(currentLevelData.map(item => item.anoSerie))]
-         .sort((a, b) => parseInt(a) - parseInt(b));
+     // Extract year numbers, sort numerically, convert back to string
+     const sortedYears = [...new Set(currentLevelData.map(item => parseInt(item.anoSerie)))]
+         .filter(year => !isNaN(year)) // Ensure only numbers are parsed
+         .sort((a, b) => a - b)
+         .map(String); // Convert back to string for Select component value
      return sortedYears;
    }, [selectedLevel, currentLevelData]);
 
@@ -116,10 +172,13 @@ export default function DashboardPage() {
 
     const availableBimestres = useMemo(() => {
      if (!selectedLevel || !subject || !yearSeries || !currentLevelData.length) return [];
+     // Extract bimestre numbers, sort numerically, convert back to string
      const bimestres = [...new Set(currentLevelData
        .filter(item => item.anoSerie === yearSeries && item.disciplina === subject)
-       .map(item => item.bimestre)
-       )].sort((a, b) => parseInt(a) - parseInt(b));
+       .map(item => parseInt(item.bimestre)))]
+       .filter(bim => !isNaN(bim))
+       .sort((a, b) => a - b)
+       .map(String);
      return bimestres;
    }, [selectedLevel, subject, yearSeries, currentLevelData]);
 
@@ -139,10 +198,11 @@ export default function DashboardPage() {
           item.bimestre === bimestre &&
           item.objetosDoConhecimento === knowledgeObject
       );
-      const contentsSet = new Set<string>();
-      matchingItems.forEach(item => { if (typeof item.conteudo === 'string') { contentsSet.add(item.conteudo.trim()); } });
+      // Use a Set to automatically handle duplicates, then sort
+      const contentsSet = new Set<string>(matchingItems.map(item => item.conteudo?.trim()).filter(Boolean) as string[]);
       return Array.from(contentsSet).sort();
   }, [selectedLevel, knowledgeObject, bimestre, subject, yearSeries, currentLevelData]);
+
 
    const availableSkills = useMemo(() => {
        if (!selectedLevel || !knowledgeObject || !bimestre || !subject || !yearSeries || !currentLevelData.length || selectedContents.length === 0) return [];
@@ -152,14 +212,20 @@ export default function DashboardPage() {
            item.disciplina === subject &&
            item.bimestre === bimestre &&
            item.objetosDoConhecimento === knowledgeObject &&
-           selectedContents.includes(item.conteudo)
+           item.conteudo && // Ensure conteudo exists
+           selectedContents.includes(item.conteudo.trim()) // Match against trimmed content
        );
-       matchingItems.forEach(item => { if (typeof item.habilidade === 'string') { skillsSet.add(item.habilidade.trim()); } });
+       matchingItems.forEach(item => {
+           if (typeof item.habilidade === 'string') {
+               skillsSet.add(item.habilidade.trim());
+           }
+       });
        return Array.from(skillsSet).sort();
    }, [selectedLevel, knowledgeObject, bimestre, subject, yearSeries, currentLevelData, selectedContents]);
 
   // --- Reset dependent fields ---
-  const resetFields = () => {
+  const resetFields = (fullReset = true) => {
+     if (fullReset) setSelectedLevel('');
     setYearSeries('');
     setSubject('');
     setBimestre('');
@@ -167,28 +233,57 @@ export default function DashboardPage() {
     setSelectedContents([]);
     setSelectedSkills([]);
     setAulaDuracao('');
-    setEditablePlanContent(''); // Clear editor content
-    setIsPlanGenerated(false); // Reset generated flag
+    setAdditionalInstructions('');
+    setEditablePlanContent('');
+    setIsPlanGeneratedOrLoaded(false);
     setSuggestedContent([]);
     setSelectedMaterialFile(null);
+     setCurrentEditingPlan(null); // Clear the plan being edited
+     // If resetting due to navigation (not full reset), keep level?
+     if (!fullReset && router) {
+         // Keep current level if not a full reset? Maybe not needed if logic handles it.
+     } else if (fullReset && router) {
+        router.replace('/dashboard', undefined); // Remove planId from URL on full reset
+     }
   }
 
-  const handleLevelChange = (value: string) => { setSelectedLevel(value as EducationLevel); resetFields(); };
-  const handleYearChange = (value: string) => { setYearSeries(value); setSubject(''); setBimestre(''); setKnowledgeObject(''); setSelectedContents([]); setSelectedSkills([]); setAulaDuracao(''); setEditablePlanContent(''); setIsPlanGenerated(false); setSuggestedContent([]); setSelectedMaterialFile(null); };
-  const handleSubjectChange = (value: string) => { setSubject(value); setBimestre(''); setKnowledgeObject(''); setSelectedContents([]); setSelectedSkills([]); setAulaDuracao(''); setEditablePlanContent(''); setIsPlanGenerated(false); setSuggestedContent([]); setSelectedMaterialFile(null); };
-  const handleBimestreChange = (value: string) => { setBimestre(value); setKnowledgeObject(''); setSelectedContents([]); setSelectedSkills([]); setAulaDuracao(''); setEditablePlanContent(''); setIsPlanGenerated(false); setSuggestedContent([]); setSelectedMaterialFile(null); };
-  const handleKnowledgeObjectChange = (value: string) => { setKnowledgeObject(value); setSelectedContents([]); setSelectedSkills([]); setAulaDuracao(''); setEditablePlanContent(''); setIsPlanGenerated(false); setSuggestedContent([]); setSelectedMaterialFile(null); };
-  const handleContentChange = (content: string, checked: boolean) => { setSelectedContents(prev => { const newContents = checked ? [...prev, content] : prev.filter(c => c !== content); setSelectedSkills([]); setAulaDuracao(''); setEditablePlanContent(''); setIsPlanGenerated(false); setSuggestedContent([]); setSelectedMaterialFile(null); return newContents; }); };
-  const handleSkillChange = (skill: string, checked: boolean) => { setSelectedSkills(prev => checked ? [...prev, skill] : prev.filter(s => s !== skill)); setAulaDuracao(''); setEditablePlanContent(''); setIsPlanGenerated(false); setSuggestedContent([]); setSelectedMaterialFile(null); };
-  const handleDurationChange = (value: string) => { setAulaDuracao(value); setEditablePlanContent(''); setIsPlanGenerated(false); setSuggestedContent([]); };
-  const handleMaterialFileChange = (event: React.ChangeEvent<HTMLInputElement>) => { if (event.target.files?.[0]) { setSelectedMaterialFile(event.target.files[0]); } else { setSelectedMaterialFile(null); } setEditablePlanContent(''); setIsPlanGenerated(false); setSuggestedContent([]); };
+   // Helper to determine if editing
+   const isEditing = !!currentEditingPlan;
+
+   // Reset fields when selections change, *unless* initially loading the plan
+   const handleFieldChangeReset = () => {
+       if (loadingPlanToEdit) return; // Don't reset while loading the plan to edit
+       setEditablePlanContent('');
+       setIsPlanGeneratedOrLoaded(false);
+       setSuggestedContent([]);
+        // If the user changes a field *while* editing, we stop "editing" that specific saved plan
+        // and revert to "generate new" or "update current unsaved" mode.
+       if (isEditing) {
+            setCurrentEditingPlan(null); // No longer editing the specific saved plan ID
+            router.replace('/dashboard', undefined); // Remove planId from URL
+            // Keep the modified form fields, but clear the generated plan content
+       }
+
+   }
+
+  const handleLevelChange = (value: string) => { setSelectedLevel(value as EducationLevel); resetFields(false); }; // Don't fully reset URL
+  const handleYearChange = (value: string) => { setYearSeries(value); setSubject(''); setBimestre(''); setKnowledgeObject(''); setSelectedContents([]); setSelectedSkills([]); setAulaDuracao(''); handleFieldChangeReset(); };
+  const handleSubjectChange = (value: string) => { setSubject(value); setBimestre(''); setKnowledgeObject(''); setSelectedContents([]); setSelectedSkills([]); setAulaDuracao(''); handleFieldChangeReset(); };
+  const handleBimestreChange = (value: string) => { setBimestre(value); setKnowledgeObject(''); setSelectedContents([]); setSelectedSkills([]); setAulaDuracao(''); handleFieldChangeReset(); };
+  const handleKnowledgeObjectChange = (value: string) => { setKnowledgeObject(value); setSelectedContents([]); setSelectedSkills([]); setAulaDuracao(''); handleFieldChangeReset(); };
+  const handleContentChange = (content: string, checked: boolean) => { setSelectedContents(prev => { const newContents = checked ? [...prev, content] : prev.filter(c => c !== content); setSelectedSkills([]); setAulaDuracao(''); handleFieldChangeReset(); return newContents; }); };
+  const handleSkillChange = (skill: string, checked: boolean) => { setSelectedSkills(prev => checked ? [...prev, skill] : prev.filter(s => s !== skill)); setAulaDuracao(''); handleFieldChangeReset(); };
+  const handleDurationChange = (value: string) => { setAulaDuracao(value); handleFieldChangeReset(); };
+  const handleMaterialFileChange = (event: React.ChangeEvent<HTMLInputElement>) => { if (event.target.files?.[0]) { setSelectedMaterialFile(event.target.files[0]); } else { setSelectedMaterialFile(null); } handleFieldChangeReset(); };
+  const handleInstructionsChange = (value: string) => { setAdditionalInstructions(value); /* Don't reset plan on instruction change */ };
+
 
   const isEnsinoMedioNoturno = useMemo(() => selectedLevel === 'Ensino Médio Noturno', [selectedLevel]);
   const currentAulaDuracaoOptions = useMemo(() => selectedLevel ? (isEnsinoMedioNoturno ? aulaDuracaoNoturnoOptions : aulaDuracaoOptions) : [], [selectedLevel, isEnsinoMedioNoturno]);
 
-  useEffect(() => { if (aulaDuracao && !currentAulaDuracaoOptions.includes(aulaDuracao)) { setAulaDuracao(''); } }, [currentAulaDuracaoOptions, aulaDuracao]);
+  useEffect(() => { if (aulaDuracao && !currentAulaDuracaoOptions.includes(aulaDuracao)) { setAulaDuracao(''); handleFieldChangeReset(); } }, [currentAulaDuracaoOptions, aulaDuracao, loadingPlanToEdit]); // Add loadingPlanToEdit dependency
 
-  const formatYearSeriesDisplay = (year: string, level: EducationLevel | ''): string => { if (!year || !level) return year; if (level.includes('Anos')) return `${year}º ano`; if (level.includes('Médio')) return `${year}ª série`; return year; };
+  const formatYearSeriesDisplay = (year: string, level: EducationLevel | ''): string => { if (!year || !level) return year; const yearNum = parseInt(year); if (isNaN(yearNum)) return year; if (level.includes('Anos')) return `${yearNum}º ano`; if (level.includes('Médio')) return `${yearNum}ª série`; return year; };
   const formatBimestreDisplay = (bimestreNum: string): string => bimestreNum ? `${bimestreNum}º Bimestre` : '';
 
   const fullYearSeriesString = useMemo(() => {
@@ -214,17 +309,40 @@ export default function DashboardPage() {
   // Function to convert Markdown (used in AI response) to HTML
   const markdownToHtml = (markdown: string): string => {
       try {
-        // Basic sanitization: Remove potential script tags or dangerous attributes
-        // More robust sanitization might be needed depending on the trust level of the AI output
+        // Basic sanitization
         const sanitizedMarkdown = markdown
-            .replace(/<script.*?>.*?<\/script>/gis, '') // Remove script tags
-            .replace(/ on\w+="[^"]*"/g, ''); // Remove event handlers like onclick etc.
+            .replace(/<script.*?>.*?<\/script>/gis, '')
+            .replace(/ on\w+="[^"]*"/g, '');
 
-        // Configure marked to handle line breaks and GitHub Flavored Markdown
-        return marked.parse(sanitizedMarkdown, { breaks: true, gfm: true });
+        // Configure marked
+        const renderer = new marked.Renderer();
+        // Customize heading rendering for consistent spacing/styling in editor
+        renderer.heading = (text, level) => {
+            const escapedText = text.toLowerCase().replace(/[^\w]+/g, '-');
+            return `<h${level} id="${escapedText}" class="mt-4 mb-2 font-semibold">${text}</h${level}>\n`;
+        };
+        // Customize list rendering for better spacing
+        renderer.list = (body, ordered) => {
+            const tag = ordered ? 'ol' : 'ul';
+            // Add margin bottom to lists
+            return `<${tag} class="mb-3 pl-6 list-${ordered ? 'decimal' : 'disc'}">${body}</${tag}>\n`;
+        };
+        renderer.listitem = (text) => {
+            // Add margin bottom to list items
+            return `<li class="mb-1">${text}</li>\n`;
+        };
+        // Customize paragraph rendering
+        renderer.paragraph = (text) => {
+            // Add margin bottom to paragraphs, unless it's inside a list item (handled by li margin)
+            if (text.includes('<li')) { // Basic check, might need refinement
+                 return `${text}\n`;
+            }
+             return `<p class="mb-2">${text}</p>\n`;
+        };
+
+        return marked.parse(sanitizedMarkdown, { renderer, breaks: true, gfm: true });
       } catch (error) {
           console.error("Error converting markdown to HTML:", error);
-          // Provide a user-friendly error message within HTML tags for the editor
           return `<p><strong>Erro ao processar o plano recebido.</strong> Por favor, tente gerar novamente.</p><p><small>Detalhe técnico: ${error instanceof Error ? error.message : String(error)}</small></p>`;
       }
   };
@@ -239,9 +357,11 @@ export default function DashboardPage() {
     setGeneratingPlan(true);
     setReadingFile(true);
     setEditablePlanContent(''); // Clear editor
-    setIsPlanGenerated(false);
+    setIsPlanGeneratedOrLoaded(false);
     setSuggestingContent(false);
     setSuggestedContent([]);
+    setCurrentEditingPlan(null); // Generating new plan, not editing existing one anymore
+    router.replace('/dashboard', undefined); // Remove planId from URL
 
     let materialDataUri: string | undefined = undefined;
     if (selectedMaterialFile) {
@@ -254,8 +374,8 @@ export default function DashboardPage() {
     }
     setReadingFile(false);
 
-    const formattedContents = selectedContents.join(', ');
-    const formattedSkills = selectedSkills.join(', ');
+    const formattedContents = selectedContents.map(c => c.trim()).join(', ');
+    const formattedSkills = selectedSkills.map(s => s.trim()).join(', ');
 
     const input: GenerateLessonPlanInput = {
       disciplina: subject, anoSerie: fullYearSeriesString, habilidade: formattedSkills,
@@ -264,17 +384,16 @@ export default function DashboardPage() {
     };
 
     try {
-      console.log("[Dashboard] Sending request to generateLessonPlan with input:", input);
+      console.log("[Dashboard] Sending request to generateLessonPlan with input:", { ...input, materialDigitalDataUri: input.materialDigitalDataUri ? 'Present' : 'Not present' });
       const response = await generateLessonPlan(input);
 
       if (!response || !response.lessonPlan) {
-          // Handle cases where the AI might return an empty or invalid response structure
           throw new Error("A resposta da IA está vazia ou em formato inválido.");
       }
 
-      const htmlContent = markdownToHtml(response.lessonPlan); // Convert AI's markdown to HTML
-      setEditablePlanContent(htmlContent); // Set editor content
-      setIsPlanGenerated(true); // Mark plan as generated
+      const htmlContent = markdownToHtml(response.lessonPlan);
+      setEditablePlanContent(htmlContent);
+      setIsPlanGeneratedOrLoaded(true);
       console.log("[Dashboard] Lesson plan generated successfully.");
       toast({ title: "Plano Gerado", description: "O plano de aula foi gerado. Edite-o abaixo.", variant: "default" });
 
@@ -284,11 +403,10 @@ export default function DashboardPage() {
     } catch (error: any) {
       console.error("[Dashboard] Error generating lesson plan:", error);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      // Display the specific error message from the flow/conversion in the editor and toast
-      const errorHtml = `<p><strong>Erro ao gerar o plano de aula:</strong></p><p>${errorMessage}</p><p><small>Verifique os detalhes no console do navegador ou tente novamente.</small></p>`;
-      setEditablePlanContent(errorHtml); // Set error HTML in editor
-      setIsPlanGenerated(true); // Mark as generated even if error, to show the error message
-      toast({ title: "Erro na Geração", description: `Falha ao gerar o plano: ${errorMessage}`, variant: "destructive", duration: 10000 }); // Use the specific error message
+      const errorHtml = `<p><strong>Erro ao gerar o plano de aula:</strong></p><p>${errorMessage}</p><p><small>Verifique os detalhes no console ou tente novamente.</small></p>`;
+      setEditablePlanContent(errorHtml);
+      setIsPlanGeneratedOrLoaded(true); // Show error in editor
+      toast({ title: "Erro na Geração", description: `Falha ao gerar o plano: ${errorMessage}`, variant: "destructive", duration: 10000 });
     } finally {
       setGeneratingPlan(false);
     }
@@ -306,34 +424,48 @@ export default function DashboardPage() {
      } finally { setSuggestingContent(false); }
    };
 
-  // Function to save the edited plan
-  const handleSavePlan = async () => {
-      // Get the current HTML content from the editor state
+  // Function to save or update the plan
+  const handleSaveOrUpdatePlan = async () => {
       if (!user || !editablePlanContent || !selectedLevel || !subject || !yearSeries || !bimestre || !knowledgeObject || selectedContents.length === 0 || selectedSkills.length === 0 || !aulaDuracao) {
-          toast({ title: "Erro ao Salvar", description: "Não é possível salvar. Verifique se um plano foi gerado e se todas as informações essenciais do formulário estão preenchidas.", variant: "destructive", duration: 7000 });
+          toast({ title: "Erro ao Salvar", description: "Não é possível salvar. Verifique se um plano foi gerado/carregado e se todas as informações essenciais do formulário estão preenchidas.", variant: "destructive", duration: 7000 });
           return;
       }
 
-      // Add a basic check to prevent saving just the error message placeholder
       if (editablePlanContent.includes("Erro ao gerar o plano de aula:")) {
-          toast({ title: "Erro no Plano", description: "Não é possível salvar um plano que resultou em erro. Por favor, gere um plano válido primeiro.", variant: "destructive" });
+          toast({ title: "Erro no Plano", description: "Não é possível salvar um plano que resultou em erro. Por favor, gere ou carregue um plano válido primeiro.", variant: "destructive" });
           return;
       }
 
       setIsSavingPlan(true);
       try {
-          const planDetails: SavedPlanDetails = {
+          const planData: SavedPlanDetails = {
               userId: user.id, level: selectedLevel, yearSeries: fullYearSeriesString, subject, bimestre,
               knowledgeObject, contents: selectedContents, skills: selectedSkills, duration: aulaDuracao,
               additionalInstructions: additionalInstructions || undefined,
               generatedPlan: editablePlanContent, // Save the HTML content from the editor
-              createdAt: new Date().toISOString(),
+              createdAt: currentEditingPlan?.createdAt || new Date().toISOString(), // Keep original creation date if updating
           };
-          await savePlan(planDetails);
-          toast({ title: "Plano Salvo", description: "Seu plano de aula editado foi salvo com sucesso!", variant: "default" });
+
+          if (currentEditingPlan?.id) {
+              // Update existing plan
+              const planToUpdate: SavedPlan = {
+                  ...planData,
+                  id: currentEditingPlan.id,
+                  // updatedAt will be set by the updatePlan function
+              };
+              await updatePlan(user.id, planToUpdate);
+              toast({ title: "Plano Atualizado", description: "Seu plano de aula foi atualizado com sucesso!", variant: "default" });
+          } else {
+              // Save new plan
+              const savedPlan = await savePlan(planData);
+              setCurrentEditingPlan(savedPlan); // Set the current plan to the newly saved one
+              // Update URL to reflect the new plan ID for potential further edits
+              router.replace(`/dashboard?planId=${savedPlan.id}`, undefined);
+              toast({ title: "Plano Salvo", description: "Seu plano de aula foi salvo com sucesso!", variant: "default" });
+          }
       } catch (error) {
-          console.error("Error saving lesson plan:", error);
-          toast({ title: "Erro ao Salvar", description: `Não foi possível salvar o plano. ${error instanceof Error ? error.message : 'Erro desconhecido.'}`, variant: "destructive" });
+          console.error(`Error ${currentEditingPlan ? 'updating' : 'saving'} lesson plan:`, error);
+          toast({ title: `Erro ao ${currentEditingPlan ? 'Atualizar' : 'Salvar'}`, description: `Não foi possível ${currentEditingPlan ? 'atualizar' : 'salvar'} o plano. ${error instanceof Error ? error.message : 'Erro desconhecido.'}`, variant: "destructive" });
       } finally { setIsSavingPlan(false); }
   };
 
@@ -342,28 +474,20 @@ export default function DashboardPage() {
     setEditablePlanContent(htmlContent);
   };
 
+  // Loading state for the whole page or just the plan loading part
+   if (authLoading || !user) {
+    return <DashboardLoadingSkeleton />; // Use a separate skeleton component
+   }
 
-  if (authLoading || !user) {
-    // Improved loading state for the whole page
-    return (
-      <div className="flex min-h-screen flex-col bg-secondary">
-         <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6 shadow-sm">
-             <div className="flex items-center gap-4"> <div className="w-10 h-10"></div> <div className="flex items-center gap-2"> <BookOpenCheck className="h-7 w-7 text-primary" /> <h1 className="text-xl font-semibold text-primary">redocêncIA</h1> </div> </div>
-             <div className="flex items-center gap-4"> <Skeleton className="h-5 w-24 hidden sm:inline" /> <Skeleton className="h-8 w-8 rounded-full" /> <Skeleton className="h-8 w-8 rounded-full" /> <Skeleton className="h-8 w-8 rounded-full" /> </div>
-         </header>
-         <main className="flex-1 p-4 md:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-           {/* Re-use loading component structure */}
-           <Card className="shadow-md"> <CardHeader> <Skeleton className="h-7 w-48 mb-1" /> <Skeleton className="h-4 w-64" /> </CardHeader> <CardContent className="space-y-4"> {[...Array(9)].map((_, i) => ( <div key={i} className="space-y-2"> <Skeleton className="h-4 w-1/4" /> <Skeleton className={`h-${i === 5 ? 12 : i === 7 ? 20 : 10} w-full`} /> </div> ))} <Skeleton className="h-10 w-full mt-4" /> </CardContent> </Card>
-           <Card className="shadow-md flex flex-col"> <CardHeader> <Skeleton className="h-7 w-40 mb-1" /> <Skeleton className="h-4 w-56" /> </CardHeader> <CardContent className="flex-1 overflow-hidden"> <div className="space-y-4"> <Skeleton className="h-4 w-3/4" /> <Skeleton className="h-4 w-1/2" /> <Skeleton className="h-20 w-full" /> <Skeleton className="h-4 w-full" /> <Skeleton className="h-4 w-5/6" /> <Skeleton className="h-4 w-full mt-6 pt-4 border-t" /> <Skeleton className="h-4 w-3/4" /> </div> </CardContent> </Card>
-         </main>
-      </div>
-     );
-  }
 
-   const formDisabled = loadingData || generatingPlan || readingFile || showDataMissingAlert || isSavingPlan;
+   const formDisabled = loadingData || generatingPlan || readingFile || showDataMissingAlert || isSavingPlan || loadingPlanToEdit;
    const generateButtonDisabled = formDisabled || selectedContents.length === 0 || selectedSkills.length === 0 || !aulaDuracao;
-   // Enable save only if a plan has been generated (even if it's an error message) and not currently saving/generating/reading
-   const saveButtonDisabled = formDisabled || !isPlanGenerated || generatingPlan || readingFile;
+   // Enable save only if a plan has been generated/loaded and not currently saving/generating/reading
+   const saveButtonDisabled = formDisabled || !isPlanGeneratedOrLoaded || generatingPlan || readingFile;
+   const pageTitle = isEditing ? "Editar Plano de Aula" : "Gerar Plano de Aula";
+   const saveButtonText = isEditing ? (isSavingPlan ? 'Atualizando...' : 'Atualizar Plano') : (isSavingPlan ? 'Salvando...' : 'Salvar Novo Plano');
+   const generateButtonIcon = isEditing ? <RotateCcw /> : <Bot />;
+   const saveButtonIcon = isEditing ? <Save /> : <UploadCloud />;
 
 
   return (
@@ -376,8 +500,11 @@ export default function DashboardPage() {
         {/* Left Column: Form */}
         <Card className={`shadow-md ${formDisabled ? 'opacity-50 pointer-events-none' : ''}`}>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-xl"> <GraduationCap className="h-6 w-6 text-primary" /> Gerar Plano de Aula </CardTitle>
-            <CardDescription>Selecione as opções para gerar um plano de aula com IA.</CardDescription>
+            <CardTitle className="flex items-center gap-2 text-xl">
+                {isEditing ? <Pencil className="h-6 w-6 text-primary" /> : <GraduationCap className="h-6 w-6 text-primary" />}
+                 {pageTitle}
+             </CardTitle>
+            <CardDescription>Selecione as opções e edite o plano gerado pela IA.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Education Level */}
@@ -397,11 +524,13 @@ export default function DashboardPage() {
             {/* Lesson Duration */}
              <div className="space-y-2"> <Label htmlFor="aulaDuracao" className="flex items-center gap-1"><Clock className="h-4 w-4" /> Duração da Aula *</Label> <Select value={aulaDuracao} onValueChange={handleDurationChange} disabled={formDisabled || selectedSkills.length === 0 || currentAulaDuracaoOptions.length === 0}> <SelectTrigger id="aulaDuracao"> <SelectValue placeholder={ !selectedLevel ? "Selecione nível" : selectedSkills.length === 0 ? "Selecione habilidade(s)" : currentAulaDuracaoOptions.length === 0 ? "Nenhuma duração" : "Selecione a duração" } /> </SelectTrigger> <SelectContent> {currentAulaDuracaoOptions.map(dur => ( <SelectItem key={dur} value={dur}>{dur}</SelectItem> ))} </SelectContent> </Select> {isEnsinoMedioNoturno && <p className="text-xs text-muted-foreground mt-1">Durações para Noturno.</p>} {!isEnsinoMedioNoturno && selectedLevel && <p className="text-xs text-muted-foreground mt-1">Durações padrão.</p>} </div>
             {/* Additional Instructions */}
-            <div className="space-y-2"> <Label htmlFor="additionalInstructions" className="flex items-center gap-1"><MessageSquare className="h-4 w-4" /> Orientações Adicionais</Label> <Textarea id="additionalInstructions" placeholder="Ex: turma com dificuldades, usar recursos específicos, foco em atividade prática..." value={additionalInstructions} onChange={(e) => setAdditionalInstructions(e.target.value)} rows={3} disabled={formDisabled} /> </div>
+             <div className="space-y-2"> <Label htmlFor="additionalInstructions" className="flex items-center gap-1"><MessageSquare className="h-4 w-4" /> Orientações Adicionais</Label> <Textarea id="additionalInstructions" placeholder="Ex: turma com dificuldades, usar recursos específicos, foco em atividade prática..." value={additionalInstructions} onChange={(e) => handleInstructionsChange(e.target.value)} rows={3} disabled={formDisabled} /> </div>
              {/* File Attachment */}
-             <div className="space-y-2"> <Label htmlFor="materialFile" className="flex items-center gap-1"><Paperclip className="h-4 w-4" /> Anexar Material (Opcional)</Label> <Input id="materialFile" type="file" onChange={handleMaterialFileChange} disabled={formDisabled} className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" /> {selectedMaterialFile && ( <p className="text-xs text-muted-foreground mt-1"> Arquivo: {selectedMaterialFile.name} ({(selectedMaterialFile.size / 1024 / 1024).toFixed(2)} MB) {selectedMaterialFile.size > 4 * 1024 * 1024 && <span className="text-destructive ml-2">(Atenção: Arquivos grandes podem falhar)</span>} </p> )} </div>
-            {/* Generate Button */}
-            <Button onClick={handleGeneratePlan} disabled={generateButtonDisabled} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"> {readingFile ? 'Lendo Anexo...' : generatingPlan ? 'Gerando Plano com IA...' : 'Gerar Plano de Aula'} </Button>
+             <div className="space-y-2"> <Label htmlFor="materialFile" className="flex items-center gap-1"><Paperclip className="h-4 w-4" /> Anexar Material (Opcional)</Label> <Input id="materialFile" type="file" onChange={handleMaterialFileChange} disabled={formDisabled || isEditing} /* Disable file input when editing */ title={isEditing ? "Anexo não pode ser alterado ao editar" : ""} className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" /> {selectedMaterialFile && ( <p className="text-xs text-muted-foreground mt-1"> Arquivo: {selectedMaterialFile.name} ({(selectedMaterialFile.size / 1024 / 1024).toFixed(2)} MB) {selectedMaterialFile.size > 4 * 1024 * 1024 && <span className="text-destructive ml-2">(Atenção: Arquivos grandes podem falhar)</span>} </p> )} {isEditing && <p className="text-xs text-muted-foreground mt-1">Anexo não pode ser alterado ao editar um plano existente.</p>} </div>
+             {/* Generate/Regenerate Button */}
+             <Button onClick={handleGeneratePlan} disabled={generateButtonDisabled} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"> {generateButtonIcon} {readingFile ? 'Lendo Anexo...' : generatingPlan ? 'Gerando com IA...' : (isEditing ? 'Regerar com IA (Descarta Edições)' : 'Gerar Plano com IA')} </Button>
+             {/* Display warning if regenerating */}
+             {isEditing && isPlanGeneratedOrLoaded && <p className="text-xs text-destructive text-center mt-1">Regerar descartará as edições feitas no plano atual.</p>}
           </CardContent>
         </Card>
 
@@ -410,23 +539,25 @@ export default function DashboardPage() {
             <CardHeader>
                 <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2"> <Bot className="h-6 w-6 text-primary" /> <CardTitle className="text-xl">Plano Gerado e Editor</CardTitle> </div>
-                     <Button variant="outline" size="sm" onClick={handleSavePlan} disabled={saveButtonDisabled}> <Save className="mr-2 h-4 w-4" /> {isSavingPlan ? 'Salvando...' : 'Salvar Plano Editado'} </Button>
+                      <Button variant="outline" size="sm" onClick={handleSaveOrUpdatePlan} disabled={saveButtonDisabled}> {saveButtonIcon} {saveButtonText} </Button>
                 </div>
-                <CardDescription>Edite o plano gerado pela IA antes de salvar ou exportar.</CardDescription>
+                <CardDescription>
+                   {isEditing ? "Edite o plano carregado ou regere com a IA." : "O plano gerado pela IA aparecerá aqui para você editar e salvar."}
+                 </CardDescription>
             </CardHeader>
-            <CardContent className="flex-1 overflow-hidden flex flex-col"> {/* Make content area flex column */}
-                 {(generatingPlan || readingFile) ? (
-                    <div className="space-y-4 p-4 flex-1 flex flex-col items-center justify-center text-center"> {/* Centered Loading */}
+            <CardContent className="flex-1 overflow-hidden flex flex-col">
+                 {(generatingPlan || readingFile || loadingPlanToEdit) ? (
+                    <div className="space-y-4 p-4 flex-1 flex flex-col items-center justify-center text-center">
                          <Bot className="h-12 w-12 text-primary animate-bounce mb-4" />
                          <p className="text-lg font-semibold text-primary">
-                           {readingFile ? 'Processando anexo...' : 'Gerando seu plano de aula...'}
+                           {loadingPlanToEdit ? 'Carregando plano para edição...' : readingFile ? 'Processando anexo...' : 'Gerando seu plano de aula...'}
                          </p>
                          <p className="text-sm text-muted-foreground">Isso pode levar alguns segundos.</p>
                          <Skeleton className="h-4 w-3/4 mt-6" />
                          <Skeleton className="h-4 w-1/2 mt-2" />
                          <Skeleton className="h-20 w-full mt-4" />
                     </div>
-                ) : isPlanGenerated ? ( // Show editor only after generation (or error)
+                ) : isPlanGeneratedOrLoaded ? (
                    <>
                        {/* Editor Component */}
                        <RichTextEditor content={editablePlanContent} onChange={handleEditorChange} />
@@ -441,7 +572,7 @@ export default function DashboardPage() {
                         ) : suggestedContent.length > 0 ? (
                              <div className="mt-4 border-t pt-3 px-4 pb-2">
                                 <p className="font-semibold text-md mb-2">Sugestões de Conteúdo Adicional:</p>
-                                <ScrollArea className="h-[80px]"> {/* Limit height of suggestions */}
+                                <ScrollArea className="h-[80px]">
                                     <ul className="list-disc pl-5 space-y-1 text-sm">
                                         {suggestedContent.map((suggestion, idx) => (
                                             <li key={idx}>{suggestion}</li>
@@ -449,19 +580,19 @@ export default function DashboardPage() {
                                     </ul>
                                 </ScrollArea>
                             </div>
-                        ) : !generatingPlan && !readingFile && !suggestingContent && !editablePlanContent.includes("Erro ao gerar") ? ( // Show if no suggestions, not loading, and no error
+                        ) : !generatingPlan && !readingFile && !suggestingContent && !editablePlanContent.includes("Erro ao gerar") ? (
                              <div className="mt-4 border-t pt-3 px-4 pb-2">
                                 <p className="text-sm text-muted-foreground">Nenhuma sugestão de conteúdo adicional encontrada ou aplicável.</p>
                              </div>
                         ) : null }
                     </>
-                ) : ( // Initial placeholder state
+                ) : (
                     <div className="flex-1 flex flex-col items-center justify-center text-center p-4 border rounded-md bg-muted/30">
                          <Bot className="h-12 w-12 text-muted-foreground mb-4" />
                         <p className="text-muted-foreground">
                             {showDataMissingAlert
                                 ? (user?.username === 'admin' ? "Dados do escopo não encontrados. Carregue os arquivos nas configurações." : "Dados necessários não disponíveis. Contate o administrador.")
-                                : "Selecione as opções no formulário ao lado e clique em \"Gerar Plano de Aula\". O resultado gerado pela IA aparecerá aqui para você editar e salvar."}
+                                : "Selecione as opções no formulário ao lado e clique em \"Gerar Plano de Aula\" ou carregue um plano existente na aba \"Meus Planos\"."}
                          </p>
                          {loadingData && <p className="text-sm text-primary mt-2">Carregando dados do escopo...</p>}
                      </div>
@@ -473,4 +604,27 @@ export default function DashboardPage() {
   );
 }
 
-    
+// Skeleton component for initial page load
+function DashboardLoadingSkeleton() {
+    return (
+      <div className="flex min-h-screen flex-col bg-secondary">
+         <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6 shadow-sm">
+             <div className="flex items-center gap-4"> <div className="w-10 h-10"></div> <div className="flex items-center gap-2"> <BookOpenCheck className="h-7 w-7 text-primary" /> <h1 className="text-xl font-semibold text-primary">redocêncIA</h1> </div> </div>
+             <div className="flex items-center gap-4"> <Skeleton className="h-5 w-24 hidden sm:inline" /> <Skeleton className="h-8 w-8 rounded-full" /> <Skeleton className="h-8 w-8 rounded-full" /> <Skeleton className="h-8 w-8 rounded-full" /> </div>
+         </header>
+         <main className="flex-1 p-4 md:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+           <Card className="shadow-md"> <CardHeader> <Skeleton className="h-7 w-48 mb-1" /> <Skeleton className="h-4 w-64" /> </CardHeader> <CardContent className="space-y-4"> {[...Array(9)].map((_, i) => ( <div key={i} className="space-y-2"> <Skeleton className="h-4 w-1/4" /> <Skeleton className={`h-${i === 5 ? 12 : i === 7 ? 20 : 10} w-full`} /> </div> ))} <Skeleton className="h-10 w-full mt-4" /> </CardContent> </Card>
+           <Card className="shadow-md flex flex-col"> <CardHeader> <Skeleton className="h-7 w-40 mb-1" /> <Skeleton className="h-4 w-56" /> </CardHeader> <CardContent className="flex-1 overflow-hidden"> <div className="space-y-4"> <Skeleton className="h-4 w-3/4" /> <Skeleton className="h-4 w-1/2" /> <Skeleton className="h-20 w-full" /> <Skeleton className="h-4 w-full" /> <Skeleton className="h-4 w-5/6" /> <Skeleton className="h-4 w-full mt-6 pt-4 border-t" /> <Skeleton className="h-4 w-3/4" /> </div> </CardContent> </Card>
+         </main>
+      </div>
+     );
+}
+
+// Export the main component wrapped in Suspense for searchParams
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<DashboardLoadingSkeleton />}>
+      <DashboardPageContent />
+    </Suspense>
+  );
+}

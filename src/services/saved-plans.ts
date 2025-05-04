@@ -22,7 +22,7 @@ export interface SavedPlanDetails {
     skills: string[];
     duration: string;
     additionalInstructions?: string;
-    generatedPlan: string;
+    generatedPlan: string; // Store as HTML
     createdAt: string; // ISO string date
 }
 
@@ -31,6 +31,7 @@ export interface SavedPlanDetails {
  */
 export interface SavedPlan extends SavedPlanDetails {
   id: string; // Unique identifier for the saved plan
+  updatedAt?: string; // Optional: ISO string date for last update
 }
 
 /**
@@ -45,6 +46,7 @@ const getStorageKeyForUser = (userId: string): string => {
 /**
  * Retrieves all saved plans for a specific user from localStorage.
  * Should only be called on the client-side.
+ * Sorts plans by creation date (newest first).
  *
  * @param userId - The ID of the user whose plans to retrieve.
  * @returns A promise that resolves to an array of SavedPlan objects.
@@ -62,9 +64,12 @@ export async function getPlansForUser(userId: string): Promise<SavedPlan[]> {
 
     if (storedData) {
         try {
-            const plans = JSON.parse(storedData);
+            const plans: SavedPlan[] = JSON.parse(storedData);
             // Basic validation: check if it's an array
-            return Array.isArray(plans) ? plans : [];
+            if (!Array.isArray(plans)) return [];
+            // Sort by createdAt date, newest first
+            plans.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            return plans;
         } catch (error) {
             console.error(`Error parsing saved plans for user "${userId}" from localStorage:`, error);
             return [];
@@ -75,15 +80,28 @@ export async function getPlansForUser(userId: string): Promise<SavedPlan[]> {
 }
 
 /**
+ * Retrieves a single saved plan by its ID for a specific user.
+ *
+ * @param userId - The ID of the user who owns the plan.
+ * @param planId - The ID of the plan to retrieve.
+ * @returns A promise that resolves to the SavedPlan object or null if not found.
+ */
+export async function getPlanById(userId: string, planId: string): Promise<SavedPlan | null> {
+    const allPlans = await getPlansForUser(userId);
+    return allPlans.find(plan => plan.id === planId) || null;
+}
+
+
+/**
  * Saves a new lesson plan to localStorage for a specific user.
  * Generates a unique ID for the plan.
  * Should only be called on the client-side.
  *
  * @param planDetails - The details of the plan to save.
- * @returns A promise that resolves when the plan is saved.
+ * @returns A promise that resolves to the newly saved plan with its ID.
  * @throws Error if saving fails.
  */
-export async function savePlan(planDetails: SavedPlanDetails): Promise<void> {
+export async function savePlan(planDetails: SavedPlanDetails): Promise<SavedPlan> {
     await new Promise(resolve => setTimeout(resolve, 300)); // Simulate async
 
     if (typeof window === 'undefined') {
@@ -96,18 +114,70 @@ export async function savePlan(planDetails: SavedPlanDetails): Promise<void> {
     const newPlan: SavedPlan = {
         ...planDetails,
         id: `plan-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`, // Simple unique ID
+        createdAt: new Date().toISOString(), // Ensure createdAt is set on save
     };
 
-    const updatedPlans = [...existingPlans, newPlan];
+    const updatedPlans = [newPlan, ...existingPlans]; // Add new plan to the beginning
 
     try {
         localStorage.setItem(storageKey, JSON.stringify(updatedPlans));
         console.log(`Saved plan with ID "${newPlan.id}" for user "${planDetails.userId}".`);
+        return newPlan;
     } catch (error) {
         console.error(`Error saving plan for user "${planDetails.userId}" to localStorage:`, error);
         throw new Error("Failed to save the lesson plan due to storage error.");
     }
 }
+
+/**
+ * Updates an existing saved lesson plan in localStorage for a specific user.
+ * Should only be called on the client-side.
+ *
+ * @param userId - The ID of the user who owns the plan.
+ * @param updatedPlanData - The full updated plan object, including the ID.
+ * @returns A promise that resolves when the plan is updated.
+ * @throws Error if updating fails or plan not found.
+ */
+export async function updatePlan(userId: string, updatedPlanData: SavedPlan): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, 300)); // Simulate async
+
+    if (typeof window === 'undefined') {
+        throw new Error("Cannot update plans outside of a browser environment.");
+    }
+
+    if (!updatedPlanData.id) {
+        throw new Error("Cannot update plan without an ID.");
+    }
+
+    const storageKey = getStorageKeyForUser(userId);
+    const existingPlans = await getPlansForUser(userId); // Fetch current plans (already sorted)
+
+    const planIndex = existingPlans.findIndex(plan => plan.id === updatedPlanData.id);
+
+    if (planIndex === -1) {
+        console.error(`Plan with ID "${updatedPlanData.id}" not found for user "${userId}". Cannot update.`);
+        throw new Error("Plan not found for update.");
+    }
+
+    // Create a new array with the updated plan, preserving order potentially
+    const updatedPlans = [...existingPlans];
+    updatedPlans[planIndex] = {
+        ...updatedPlanData,
+        updatedAt: new Date().toISOString(), // Set/update the updatedAt timestamp
+    };
+
+    // Optional: Re-sort if updatedAt is important for display order later
+    // updatedPlans.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    try {
+        localStorage.setItem(storageKey, JSON.stringify(updatedPlans));
+        console.log(`Updated plan with ID "${updatedPlanData.id}" for user "${userId}".`);
+    } catch (error) {
+        console.error(`Error updating plan for user "${userId}" in localStorage:`, error);
+        throw new Error("Failed to update the lesson plan due to storage error.");
+    }
+}
+
 
 /**
  * Deletes a specific saved plan for a user from localStorage.
