@@ -1,1 +1,2 @@
-// Flows will be imported for their side effects in this file.
+import '@/ai/flows/suggest-additional-content.ts';
+import '@/ai/flows/generate-lesson-plan.ts';

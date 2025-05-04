@@ -61,6 +61,9 @@ export default {
   				ring: 'hsl(var(--sidebar-ring))'
   			}
   		},
+        fontFamily: {
+            sans: ['var(--font-inter)', 'sans-serif'], // Use Inter font
+        },
   		borderRadius: {
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',
@@ -90,5 +93,8 @@ export default {
   		}
   	}
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [
+      require("tailwindcss-animate"),
+      require('@tailwindcss/typography'), // Add typography plugin
+    ],
 } satisfies Config;
