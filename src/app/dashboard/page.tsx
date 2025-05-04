@@ -331,13 +331,11 @@ function DashboardPageContent() {
             // Add margin bottom to list items
             return `<li class="mb-1">${text}</li>\n`;
         };
-        // Customize paragraph rendering
+        // Customize paragraph rendering - simplified to avoid .includes error
         renderer.paragraph = (text) => {
-            // Add margin bottom to paragraphs, unless it's inside a list item (handled by li margin)
-            if (text.includes('<li')) { // Basic check, might need refinement
-                 return `${text}\n`;
-            }
-             return `<p class="mb-2">${text}</p>\n`;
+           // The 'text' here is the raw text content, not HTML. Marked handles paragraph wrapping.
+           // Add margin bottom to paragraphs.
+           return `<p class="mb-2">${text}</p>\n`;
         };
 
         return marked.parse(sanitizedMarkdown, { renderer, breaks: true, gfm: true });
