@@ -44,22 +44,22 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex grow items-center justify-center bg-secondary p-4 lg:p-8"> {/* Use secondary background */}
+    <div className="flex flex-1 flex-col items-center justify-center bg-secondary p-4 lg:p-8"> {/* Use flex-1 and flex-col */}
        <div className="w-full max-w-md">
          {/* Logo Section */}
          <div className="flex justify-center mb-8">
             <Image
                src="https://i.imgur.com/uo4OdVQ.png" // Logo URL
-               width={136} // Original size
-               height={136} // Original size
+               width={231} // Increased width by 70% (136 * 1.7 = 231.2 -> 231)
+               height={231} // Increased height by 70% (136 * 1.7 = 231.2 -> 231)
                alt="Redocência Logo"
                priority
              />
          </div>
 
          {/* Card Section */}
-         <Card className="shadow-xl border-none rounded-lg overflow-hidden"> {/* Enhanced card styling */}
-            <CardHeader className="bg-card p-6"> {/* Header background */}
+         <Card className="shadow-xl border-none rounded-lg overflow-hidden bg-card"> {/* Enhanced card styling */}
+            <CardHeader className="p-6"> {/* Consistent padding */}
                <CardTitle className="text-2xl font-bold text-center text-card-foreground flex items-center justify-center gap-2">
                   <LogIn className="h-6 w-6" /> {/* Add Login Icon */}
                   Bem-vindo(a) de volta!
@@ -68,10 +68,10 @@ export default function LoginPage() {
                    Acesse sua conta para continuar
                </CardDescription>
             </CardHeader>
-            <CardContent className="p-6 space-y-6 bg-background"> {/* Content background */}
+            <CardContent className="p-6 space-y-6"> {/* Consistent padding */}
              <form onSubmit={handleLogin} className="space-y-4">
                <div className="space-y-2">
-                 <Label htmlFor="username">Usuário</Label>
+                 <Label htmlFor="username" className="text-card-foreground">Usuário</Label>
                  <Input
                    id="username"
                    type="text"
@@ -80,11 +80,11 @@ export default function LoginPage() {
                    onChange={(e) => setUsername(e.target.value)}
                    required
                    disabled={isLoading}
-                   className="text-base" // Ensure text size consistency
+                   className="text-base bg-background border-border text-foreground" // Ensure text size consistency and colors
                  />
                </div>
                <div className="space-y-2">
-                 <Label htmlFor="password">Senha</Label>
+                 <Label htmlFor="password" className="text-card-foreground">Senha</Label>
                  <Input
                    id="password"
                    type="password"
@@ -93,7 +93,7 @@ export default function LoginPage() {
                    onChange={(e) => setPassword(e.target.value)}
                    required
                    disabled={isLoading}
-                   className="text-base" // Ensure text size consistency
+                   className="text-base bg-background border-border text-foreground" // Ensure text size consistency and colors
                  />
                  {/* Optional: Add Forgot Password link here */}
                  {/* <div className="text-right">
@@ -109,7 +109,7 @@ export default function LoginPage() {
                </Button>
              </form>
             </CardContent>
-            <CardFooter className="flex justify-center text-sm p-4 bg-muted/50"> {/* Footer background */}
+            <CardFooter className="flex justify-center text-sm p-4 bg-card border-t border-border"> {/* Footer background and border */}
              <p className="text-muted-foreground">
                Não tem uma conta?{' '}
                <Link href="/register" className="text-primary hover:underline font-semibold">

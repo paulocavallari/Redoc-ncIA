@@ -157,14 +157,15 @@ export default function SettingsPage() {
   // Render loading or nothing if auth check is happening or user is not admin
   if (authLoading || !user || user.username !== 'admin') {
     return (
-        <div className="flex min-h-screen items-center justify-center">
+        <div className="flex flex-1 items-center justify-center bg-secondary"> {/* Use flex-1 and background */}
             {/* Optional: Add a loading indicator */}
+             <p>Carregando...</p>
         </div>
     );
   }
 
   return (
-    <div className="flex flex-col bg-secondary flex-1"> {/* Use flex-1 */}
+    <div className="flex flex-1 flex-col bg-secondary"> {/* Use flex-1 and flex-col */}
 
       <main className="flex-1 p-4 md:p-6 lg:p-8 flex justify-center">
         <div className="w-full max-w-2xl space-y-6">
@@ -179,7 +180,7 @@ export default function SettingsPage() {
                 Selecione o <strong>Nível de Ensino</strong> e faça o upload do arquivo <strong>.xlsx</strong> correspondente. O upload substituirá os dados existentes para o nível selecionado.
                 <br />
                 O nome da planilha (worksheet) será usado como o nome da Disciplina (ignore a planilha "Índice").
-                 As colunas esperadas (podem ter variações de nome) são: <strong>ANO/SÉRIE</strong> (será lido apenas o número), <strong>BIMESTRE</strong> (será lido apenas o número), <strong>HABILIDADE</strong>, <strong>OBJETOS DO CONHECIMENTO</strong>, <strong>CONTEUDO</strong>, e opcionalmente <strong>OBJETIVOS</strong>.
+                 As colunas esperadas (podem ter variações de nome) são: <strong>ANO/SÉRIE</strong> (será lido apenas o número), <strong>BIMESTRE</strong> (será lido apenas o número), <strong>HABILIDADE</strong>, <strong>OBJETOS DO CONHECIMENTO</strong>, <strong>CONTEUDO</strong>.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

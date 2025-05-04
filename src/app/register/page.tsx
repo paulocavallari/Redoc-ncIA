@@ -70,22 +70,22 @@ export default function RegisterPage() {
   };
 
   return (
-     <div className="flex grow items-center justify-center bg-secondary p-4 lg:p-8"> {/* Use secondary background */}
+     <div className="flex flex-1 flex-col items-center justify-center bg-secondary p-4 lg:p-8"> {/* Use flex-1 and flex-col */}
         <div className="w-full max-w-md">
             {/* Logo Section */}
             <div className="flex justify-center mb-8">
                 <Image
                     src="https://i.imgur.com/uo4OdVQ.png" // Logo URL
-                    width={136} // Original size
-                    height={136} // Original size
+                    width={231} // Increased width by 70% (136 * 1.7 = 231.2 -> 231)
+                    height={231} // Increased height by 70% (136 * 1.7 = 231.2 -> 231)
                     alt="Redocência Logo"
                     priority
                  />
             </div>
 
             {/* Card Section */}
-             <Card className="shadow-xl border-none rounded-lg overflow-hidden"> {/* Enhanced card styling */}
-                 <CardHeader className="bg-card p-6"> {/* Header background */}
+             <Card className="shadow-xl border-none rounded-lg overflow-hidden bg-card"> {/* Enhanced card styling */}
+                 <CardHeader className="p-6"> {/* Consistent padding */}
                     <CardTitle className="text-2xl font-bold text-center text-card-foreground flex items-center justify-center gap-2">
                         <UserPlus className="h-6 w-6" /> {/* Add UserPlus Icon */}
                         Criar Nova Conta
@@ -94,10 +94,10 @@ export default function RegisterPage() {
                         Preencha os campos abaixo para se registrar
                     </CardDescription>
                  </CardHeader>
-                 <CardContent className="p-6 space-y-6 bg-background"> {/* Content background */}
+                 <CardContent className="p-6 space-y-6"> {/* Consistent padding */}
                   <form onSubmit={handleRegister} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="name">Nome Completo</Label>
+                      <Label htmlFor="name" className="text-card-foreground">Nome Completo</Label>
                       <Input
                         id="name"
                         type="text"
@@ -106,11 +106,11 @@ export default function RegisterPage() {
                         onChange={(e) => setName(e.target.value)}
                         required
                         disabled={isLoading}
-                        className="text-base" // Ensure text size consistency
+                        className="text-base bg-background border-border text-foreground" // Ensure text size consistency and colors
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="email">Email</Label>
+                      <Label htmlFor="email" className="text-card-foreground">Email</Label>
                       <Input
                         id="email"
                         type="email"
@@ -119,11 +119,11 @@ export default function RegisterPage() {
                         onChange={(e) => setEmail(e.target.value)}
                         required
                         disabled={isLoading}
-                        className="text-base" // Ensure text size consistency
+                        className="text-base bg-background border-border text-foreground" // Ensure text size consistency and colors
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="username">Usuário</Label>
+                      <Label htmlFor="username" className="text-card-foreground">Usuário</Label>
                       <Input
                         id="username"
                         type="text"
@@ -132,11 +132,11 @@ export default function RegisterPage() {
                         onChange={(e) => setUsername(e.target.value)}
                         required
                         disabled={isLoading}
-                        className="text-base" // Ensure text size consistency
+                        className="text-base bg-background border-border text-foreground" // Ensure text size consistency and colors
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="password">Senha</Label>
+                      <Label htmlFor="password" className="text-card-foreground">Senha</Label>
                       <Input
                         id="password"
                         type="password"
@@ -146,11 +146,11 @@ export default function RegisterPage() {
                         required
                         minLength={6}
                         disabled={isLoading}
-                        className="text-base" // Ensure text size consistency
+                        className="text-base bg-background border-border text-foreground" // Ensure text size consistency and colors
                       />
                     </div>
                      <div className="space-y-2">
-                      <Label htmlFor="confirmPassword">Confirmar Senha</Label>
+                      <Label htmlFor="confirmPassword" className="text-card-foreground">Confirmar Senha</Label>
                       <Input
                         id="confirmPassword"
                         type="password"
@@ -160,7 +160,7 @@ export default function RegisterPage() {
                         required
                         minLength={6}
                         disabled={isLoading}
-                        className="text-base" // Ensure text size consistency
+                        className="text-base bg-background border-border text-foreground" // Ensure text size consistency and colors
                       />
                     </div>
                     <Button type="submit" className="w-full text-base py-3 bg-primary hover:bg-primary/90 text-primary-foreground mt-4" disabled={isLoading}>
@@ -168,7 +168,7 @@ export default function RegisterPage() {
                     </Button>
                   </form>
                  </CardContent>
-                 <CardFooter className="flex justify-center text-sm p-4 bg-muted/50"> {/* Footer background */}
+                 <CardFooter className="flex justify-center text-sm p-4 bg-card border-t border-border"> {/* Footer background and border */}
                   <p className="text-muted-foreground">
                     Já tem uma conta?{' '}
                     <Link href="/login" className="text-primary hover:underline font-semibold">

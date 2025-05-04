@@ -117,38 +117,35 @@ export default function SavedPlansPage() {
 
   if (authLoading || !user) {
     return (
-       <div className="flex min-h-screen items-center justify-center">
-          {/* Use consistent full page loading skeleton - Header is now global */}
-          <div className="flex flex-col bg-secondary flex-1 w-full">
-             {/* Header is rendered by RootLayout, no need for skeleton here */}
-             <main className="flex-1 p-4 md:p-6 lg:p-8">
-                <Skeleton className="h-8 w-48 mb-6" /> {/* Title skeleton */}
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                     {[...Array(3)].map((_, i) => (
-                         <Card key={i} className="shadow-md">
-                             <CardHeader>
-                                 <Skeleton className="h-6 w-3/4 mb-1" />
-                                 <Skeleton className="h-4 w-1/2" />
-                                 <Skeleton className="h-4 w-1/3 mt-1" />
-                             </CardHeader>
-                             <CardContent>
-                                 <Skeleton className="h-4 w-full mb-2" />
-                                 <Skeleton className="h-4 w-5/6" />
-                             </CardContent>
-                             <CardFooter className="flex justify-between">
-                                 <div className="flex gap-2">
-                                    <Skeleton className="h-9 w-20" />
-                                    <Skeleton className="h-9 w-24" />
-                                 </div>
-                                 <div className="flex gap-2">
-                                     <Skeleton className="h-9 w-9 rounded-md" />
-                                     <Skeleton className="h-9 w-9 rounded-md" />
-                                 </div>
-                             </CardFooter>
-                         </Card>
-                     ))}
-                 </div>
-             </main>
+       <div className="flex flex-1 flex-col items-center justify-center bg-secondary"> {/* Use flex-1 and flex-col */}
+          {/* Keep skeleton for loading state */}
+          <div className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-6xl mx-auto"> {/* Added width constraints */}
+             <Skeleton className="h-8 w-48 mb-6" /> {/* Title skeleton */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[...Array(3)].map((_, i) => (
+                      <Card key={i} className="shadow-md">
+                          <CardHeader>
+                              <Skeleton className="h-6 w-3/4 mb-1" />
+                              <Skeleton className="h-4 w-1/2" />
+                              <Skeleton className="h-4 w-1/3 mt-1" />
+                          </CardHeader>
+                          <CardContent>
+                              <Skeleton className="h-4 w-full mb-2" />
+                              <Skeleton className="h-4 w-5/6" />
+                          </CardContent>
+                          <CardFooter className="flex justify-between">
+                              <div className="flex gap-2">
+                                 <Skeleton className="h-9 w-20" />
+                                 <Skeleton className="h-9 w-24" />
+                              </div>
+                              <div className="flex gap-2">
+                                  <Skeleton className="h-9 w-9 rounded-md" />
+                                  <Skeleton className="h-9 w-9 rounded-md" />
+                              </div>
+                          </CardFooter>
+                      </Card>
+                  ))}
+              </div>
           </div>
        </div>
     );
@@ -156,10 +153,10 @@ export default function SavedPlansPage() {
 
   return (
     <TooltipProvider delayDuration={100}> {/* Wrap with TooltipProvider */}
-    <div className="flex flex-col bg-secondary flex-1">
+    <div className="flex flex-1 flex-col bg-secondary"> {/* Use flex-1 and flex-col */}
 
        {/* Main Content */}
-       <main className="flex-1 p-4 md:p-6 lg:p-8">
+       <main className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-6xl mx-auto"> {/* Added width constraints */}
           <h2 className="text-2xl font-semibold mb-6 text-foreground">Meus Planos Salvos</h2>
          {loadingPlans ? (
             // Keep the skeleton loading state as before
@@ -189,7 +186,7 @@ export default function SavedPlansPage() {
                  ))}
              </div>
          ) : savedPlans.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground mt-16">
+            <div className="flex flex-col items-center justify-center text-center text-muted-foreground mt-16">
                 <Save className="h-16 w-16 mb-4" /> {/* Changed List to Save */}
                 <h2 className="text-xl font-semibold mb-2">Nenhum Plano Salvo</h2>
                 <p>Você ainda não salvou nenhum plano de aula.</p>
@@ -307,4 +304,3 @@ export default function SavedPlansPage() {
     </TooltipProvider>
   );
 }
-
