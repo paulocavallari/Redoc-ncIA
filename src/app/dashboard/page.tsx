@@ -522,8 +522,7 @@ export default function DashboardPage() {
     // Show loading state or redirect handled in useEffect
     return (
        <div className="flex min-h-screen items-center justify-center">
-          <Skeleton className="h-10 w-10 rounded-full" />
-          <Skeleton className="h-4 w-[250px] ml-4" />
+          {/* Loading spinner or skeleton */}
        </div>
     );
   }
@@ -534,32 +533,8 @@ export default function DashboardPage() {
    const saveButtonDisabled = formDisabled || !generatedPlan || generatingPlan || readingFile; // Disable save if no plan or while generating/reading
 
   return (
-    <div className="flex min-h-screen flex-col bg-secondary">
-      {/* Header */}
-      <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6 shadow-sm">
-         <div className="flex items-center gap-2">
-            <BookOpenCheck className="h-7 w-7 text-primary" />
-            <h1 className="text-xl font-semibold text-primary">redocêncIA</h1>
-         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-muted-foreground hidden sm:inline">Olá, {user.name}!</span>
-           <Link href="/saved-plans" passHref>
-                <Button variant="outline" size="icon" aria-label="Planos Salvos">
-                  <List className="h-5 w-5" />
-                </Button>
-           </Link>
-          {user.username === 'admin' && (
-            <Link href="/settings" passHref>
-              <Button variant="ghost" size="icon" aria-label="Configurações">
-                <Settings className="h-5 w-5" />
-              </Button>
-            </Link>
-          )}
-          <Button variant="ghost" size="icon" onClick={logout} aria-label="Sair">
-            <LogOut className="h-5 w-5" />
-          </Button>
-        </div>
-      </header>
+    <div className="flex flex-col bg-secondary flex-1"> {/* Use flex-1 to take remaining height */}
+
 
       {/* Main Content */}
        <main className="flex-1 p-4 md:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-2 gap-6">

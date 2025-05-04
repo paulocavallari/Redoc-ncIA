@@ -164,22 +164,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-secondary">
-         {/* Header */}
-       <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6 shadow-sm">
-         <div className="flex items-center gap-4">
-           <Link href="/dashboard" passHref>
-             <Button variant="outline" size="icon" aria-label="Voltar para Dashboard">
-               <ArrowLeft className="h-5 w-5" />
-             </Button>
-           </Link>
-            <div className="flex items-center gap-2">
-               <BookOpenCheck className="h-7 w-7 text-primary" />
-               <h1 className="text-xl font-semibold text-primary">redocêncIA - Configurações</h1>
-            </div>
-         </div>
-         {/* Optional: Add logout or other header items if needed */}
-       </header>
+    <div className="flex flex-col bg-secondary flex-1"> {/* Use flex-1 */}
 
       <main className="flex-1 p-4 md:p-6 lg:p-8 flex justify-center">
         <div className="w-full max-w-2xl space-y-6">

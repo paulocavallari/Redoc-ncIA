@@ -42,13 +42,10 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-secondary p-4">
+    <div className="flex flex-1 items-center justify-center bg-secondary p-4"> {/* Changed min-h-screen to flex-1 */}
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="text-center">
-          <div className="flex justify-center items-center mb-4">
-            <BookOpenCheck className="h-10 w-10 text-primary mr-2" />
-            <CardTitle className="text-3xl font-bold text-primary">redocêncIA</CardTitle>
-          </div>
+           {/* Removed the header icon/title duplication */}
           <CardDescription>Entre para planejar suas aulas com IA</CardDescription>
         </CardHeader>
         <CardContent>

@@ -100,32 +100,17 @@ export default function SavedPlansPage() {
   if (authLoading || !user) {
     return (
        <div className="flex min-h-screen items-center justify-center">
-          <Skeleton className="h-10 w-10 rounded-full" />
-          <Skeleton className="h-4 w-[250px] ml-4" />
+          {/* Optional: Loading spinner */}
        </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-secondary">
-      {/* Header */}
-       <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6 shadow-sm">
-         <div className="flex items-center gap-4">
-           <Link href="/dashboard" passHref>
-             <Button variant="outline" size="icon" aria-label="Voltar para Dashboard">
-               <ArrowLeft className="h-5 w-5" />
-             </Button>
-           </Link>
-            <div className="flex items-center gap-2">
-               <List className="h-7 w-7 text-primary" />
-               <h1 className="text-xl font-semibold text-primary">Meus Planos Salvos</h1>
-            </div>
-         </div>
-         {/* Optional: Add user info or logout */}
-       </header>
+    <div className="flex flex-col bg-secondary flex-1"> {/* Use flex-1 */}
 
        {/* Main Content */}
        <main className="flex-1 p-4 md:p-6 lg:p-8">
+          <h2 className="text-2xl font-semibold mb-6 text-foreground">Meus Planos Salvos</h2> {/* Added title */}
          {loadingPlans ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[...Array(3)].map((_, i) => (
@@ -147,7 +132,7 @@ export default function SavedPlansPage() {
                 ))}
             </div>
          ) : savedPlans.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
+            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground mt-16"> {/* Added margin-top */}
                 <List className="h-16 w-16 mb-4" />
                 <h2 className="text-xl font-semibold mb-2">Nenhum Plano Salvo</h2>
                 <p>Você ainda não salvou nenhum plano de aula.</p>
@@ -158,7 +143,7 @@ export default function SavedPlansPage() {
          ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {savedPlans.map((plan) => (
-                    <Card key={plan.id} className="shadow-md flex flex-col">
+                    <Card key={plan.id} className="shadow-md flex flex-col bg-card hover:shadow-lg transition-shadow duration-200"> {/* Added hover effect */}
                         <CardHeader>
                             <CardTitle className="text-lg truncate">{plan.subject} - {plan.yearSeries}</CardTitle>
                             <CardDescription>
@@ -182,7 +167,7 @@ export default function SavedPlansPage() {
                                 </p>
                             </div>
                         </CardContent>
-                        <CardFooter className="flex justify-between items-center border-t pt-4">
+                        <CardFooter className="flex justify-between items-center border-t pt-4 mt-auto"> {/* Ensure footer sticks to bottom */}
                              <div className="flex gap-2">
                                  <Button variant="outline" size="sm" onClick={() => handleDownload(plan, 'pdf')}>
                                      <FileText className="mr-1 h-4 w-4" /> PDF
