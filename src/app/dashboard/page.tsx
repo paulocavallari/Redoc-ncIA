@@ -6,13 +6,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input'; // Added Input
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Settings, LogOut, BookOpenCheck, GraduationCap, BookCopy, Target, ListChecks, MessageSquare, Bot, Clock, CalendarDays, Layers } from 'lucide-react'; // Added Layers icon
+import { Settings, LogOut, BookOpenCheck, GraduationCap, BookCopy, Target, ListChecks, MessageSquare, Bot, Clock, CalendarDays, Layers, Paperclip, AlertTriangle } from 'lucide-react'; // Added Layers, Paperclip, AlertTriangle icons
 import {
     getAllEscopoDataFromStorage, // Get data for all levels
     type EscopoSequenciaItem,
@@ -23,7 +24,7 @@ import { generateLessonPlan, type GenerateLessonPlanInput } from '@/ai/flows/gen
 import { suggestAdditionalContent, type SuggestAdditionalContentInput } from '@/ai/flows/suggest-additional-content';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertTriangle } from 'lucide-react';
+import { useToast } from "@/hooks/use-toast"; // Import useToast
 
 
 // Duration options - keep the standard ones for now
@@ -43,6 +44,7 @@ const aulaDuracaoNoturnoOptions: string[] = [
 export default function DashboardPage() {
   const { user, logout, isLoading: authLoading } = useAuth();
   const router = useRouter();
+  const { toast } = useToast(); // Initialize useToast
 
   // Store data for all levels
   const [allEscopoData, setAllEscopoData] = useState<{ [key in EducationLevel]?: EscopoSequenciaItem[] }>({});
@@ -60,6 +62,8 @@ export default function DashboardPage() {
   const [selectedSkill, setSelectedSkill] = useState<string>('');
   const [aulaDuracao, setAulaDuracao] = useState<string>('');
   const [additionalInstructions, setAdditionalInstructions] = useState('');
+  const [selectedMaterialFile, setSelectedMaterialFile] = useState<File | null>(null); // State for attached file
+  const [readingFile, setReadingFile] = useState(false); // State for file reading process
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [generatedPlan, setGeneratedPlan] = useState('');
   const [suggestingContent, setSuggestingContent] = useState(false);
@@ -199,6 +203,7 @@ export default function DashboardPage() {
     setAulaDuracao('');
     setGeneratedPlan('');
     setSuggestedContent([]);
+    setSelectedMaterialFile(null); // Reset file
    };
 
   const handleYearChange = (value: string) => {
@@ -211,6 +216,7 @@ export default function DashboardPage() {
     setAulaDuracao('');
     setGeneratedPlan('');
     setSuggestedContent([]);
+    setSelectedMaterialFile(null); // Reset file
   };
 
   const handleSubjectChange = (value: string) => {
@@ -222,6 +228,7 @@ export default function DashboardPage() {
     setAulaDuracao('');
     setGeneratedPlan('');
     setSuggestedContent([]);
+    setSelectedMaterialFile(null); // Reset file
   };
 
   const handleBimestreChange = (value: string) => {
@@ -232,6 +239,7 @@ export default function DashboardPage() {
       setAulaDuracao('');
       setGeneratedPlan('');
       setSuggestedContent([]);
+      setSelectedMaterialFile(null); // Reset file
   };
 
    const handleKnowledgeObjectChange = (value: string) => {
@@ -241,6 +249,7 @@ export default function DashboardPage() {
      setAulaDuracao('');
      setGeneratedPlan('');
      setSuggestedContent([]);
+     setSelectedMaterialFile(null); // Reset file
    };
 
 
@@ -250,13 +259,29 @@ export default function DashboardPage() {
     setAulaDuracao('');
     setGeneratedPlan('');
     setSuggestedContent([]);
+    setSelectedMaterialFile(null); // Reset file
   };
 
   const handleDurationChange = (value: string) => {
       setAulaDuracao(value);
       setGeneratedPlan(''); // Reset plan if duration changes
       setSuggestedContent([]); // Reset suggestions if duration changes
+      // Keep file selected if duration changes
   };
+
+   // Handle file selection for material digital
+   const handleMaterialFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+     if (event.target.files && event.target.files.length > 0) {
+       const file = event.target.files[0];
+       // Basic validation (e.g., size limit, file type) could be added here
+       setSelectedMaterialFile(file);
+       setGeneratedPlan(''); // Reset plan if file changes
+       setSuggestedContent([]); // Reset suggestions if file changes
+     } else {
+       setSelectedMaterialFile(null);
+     }
+   };
+
 
   // Determine if the current selection is for 'Ensino Médio Noturno'
   const isEnsinoMedioNoturno = useMemo(() => {
@@ -300,18 +325,51 @@ export default function DashboardPage() {
         return `${yearPart}${levelPart}`;
     }, [yearSeries, selectedLevel]);
 
+   // Function to read file as Data URI
+   const readFileAsDataUri = (file: File): Promise<string> => {
+       return new Promise((resolve, reject) => {
+           const reader = new FileReader();
+           reader.onload = () => resolve(reader.result as string);
+           reader.onerror = (error) => reject(error);
+           reader.readAsDataURL(file);
+       });
+   };
+
 
   const handleGeneratePlan = async () => {
     if (!selectedLevel || !subject || !yearSeries || !bimestre || !knowledgeObject || !selectedSkill || !aulaDuracao || !content) {
       console.error("Por favor, preencha todos os campos obrigatórios (Nível, Ano/Série, Disciplina, Bimestre, Objeto, Habilidade, Duração). Content: ", content);
-      // TODO: Show toast message
+      toast({
+          title: "Campos Obrigatórios",
+          description: "Preencha todos os campos com '*' para gerar o plano.",
+          variant: "destructive",
+      });
       return;
     }
 
     setGeneratingPlan(true);
+    setReadingFile(true); // Start file reading indication
     setGeneratedPlan('');
     setSuggestingContent(false);
     setSuggestedContent([]);
+
+    let materialDataUri: string | undefined = undefined;
+    try {
+        if (selectedMaterialFile) {
+            materialDataUri = await readFileAsDataUri(selectedMaterialFile);
+        }
+    } catch (error) {
+        console.error("Error reading material file:", error);
+        toast({
+            title: "Erro ao Ler Arquivo",
+            description: "Não foi possível ler o arquivo de material digital anexado.",
+            variant: "destructive",
+        });
+        setReadingFile(false);
+        setGeneratingPlan(false);
+        return;
+    }
+    setReadingFile(false); // Finish file reading indication
 
     const input: GenerateLessonPlanInput = {
       disciplina: subject,
@@ -320,9 +378,11 @@ export default function DashboardPage() {
       conteudo: content, // Use the derived content based on skill
       aulaDuracao: aulaDuracao,
       orientacoesAdicionais: additionalInstructions || undefined,
+      materialDigitalDataUri: materialDataUri, // Pass the data URI
     };
 
     try {
+      console.log("Sending request to generateLessonPlan with input:", input); // Log before sending
       const response = await generateLessonPlan(input);
       setGeneratedPlan(response.lessonPlan);
 
@@ -331,8 +391,12 @@ export default function DashboardPage() {
 
     } catch (error) {
       console.error("Error generating lesson plan:", error);
-      setGeneratedPlan("Erro ao gerar o plano de aula. Verifique sua chave de API e tente novamente.");
-      // Handle error (e.g., show toast)
+      setGeneratedPlan("Erro ao gerar o plano de aula. Verifique sua chave de API, o tamanho do arquivo anexado e tente novamente.");
+      toast({ // Add toast for generation error
+            title: "Erro na Geração",
+            description: "Falha ao gerar o plano. Verifique a chave de API, o arquivo anexado ou tente mais tarde.",
+            variant: "destructive",
+      });
     } finally {
       setGeneratingPlan(false);
     }
@@ -354,6 +418,11 @@ export default function DashboardPage() {
      } catch (error) {
        console.error("Error suggesting additional content:", error);
        // Optionally show an error message
+        toast({
+             title: "Erro nas Sugestões",
+             description: "Não foi possível buscar sugestões de conteúdo adicional.",
+             variant: "destructive",
+        });
      } finally {
        setSuggestingContent(false);
      }
@@ -370,7 +439,9 @@ export default function DashboardPage() {
     );
   }
 
-   const formDisabled = loadingData || generatingPlan || showDataMissingAlert;
+   // Consolidate disabling conditions
+   const formDisabled = loadingData || generatingPlan || readingFile || showDataMissingAlert;
+   const generateButtonDisabled = formDisabled || !selectedSkill || !aulaDuracao || !content;
 
 
   return (
@@ -629,13 +700,37 @@ export default function DashboardPage() {
               />
             </div>
 
+             {/* File Attachment (Material Digital) */}
+             <div className="space-y-2">
+                <Label htmlFor="materialFile" className="flex items-center gap-1">
+                    <Paperclip className="h-4 w-4" /> Anexar Material Digital (Opcional)
+                </Label>
+                <Input
+                    id="materialFile"
+                    type="file"
+                    // Consider adding accept attribute for specific file types, e.g., accept=".pdf,.doc,.docx,.ppt,.pptx"
+                    onChange={handleMaterialFileChange}
+                    disabled={formDisabled}
+                    className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                />
+                {selectedMaterialFile && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                        Arquivo selecionado: {selectedMaterialFile.name} ({(selectedMaterialFile.size / 1024 / 1024).toFixed(2)} MB)
+                        {/* Simple size limit warning */}
+                        {selectedMaterialFile.size > 4 * 1024 * 1024 && // Example: 4MB limit
+                           <span className="text-destructive ml-2">(Atenção: Arquivos grandes podem falhar ou demorar)</span>}
+                    </p>
+                )}
+             </div>
+
+
             {/* Generate Button */}
             <Button
               onClick={handleGeneratePlan}
-              disabled={formDisabled || !selectedSkill || !aulaDuracao || !content} // Check all required fields including content
+              disabled={generateButtonDisabled}
               className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
             >
-              {generatingPlan ? 'Gerando...' : 'Gerar Plano de Aula'}
+              {readingFile ? 'Lendo arquivo...' : generatingPlan ? 'Gerando plano...' : 'Gerar Plano de Aula'}
             </Button>
           </CardContent>
         </Card>
@@ -651,7 +746,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden"> {/* Make content area scrollable */}
                 <ScrollArea className="h-full pr-4"> {/* Adjust height as needed */}
-                {generatingPlan ? (
+                {generatingPlan || readingFile ? ( // Show skeleton if reading file OR generating
                     <div className="space-y-4">
                     <Skeleton className="h-4 w-3/4" />
                     <Skeleton className="h-4 w-1/2" />
@@ -716,7 +811,7 @@ export default function DashboardPage() {
                                     ))}
                                 </ul>
                             </div>
-                        ) : !generatingPlan && !suggestingContent && generatedPlan ? ( // Show if no suggestions, not loading, and plan exists
+                        ) : !generatingPlan && !readingFile && !suggestingContent && generatedPlan ? ( // Show if no suggestions, not loading, and plan exists
                              <div className="mt-6 border-t pt-4">
                                 <p className="text-sm text-muted-foreground">Nenhuma sugestão de conteúdo adicional encontrada.</p>
                              </div>
@@ -727,7 +822,7 @@ export default function DashboardPage() {
                     <p className="text-muted-foreground">
                         {showDataMissingAlert
                             ? (user?.username === 'admin' ? "Carregue os dados do Escopo-Sequência nas configurações para começar." : "Dados indisponíveis. Contacte o administrador.")
-                            : "Selecione as opções e clique em \"Gerar Plano de Aula\"."}
+                            : "Selecione as opções e clique em \"Gerar Plano de Aula\". Você pode anexar um arquivo (PDF, DOCX, etc.) para referência."}
                      </p>
                 )}
                 </ScrollArea>

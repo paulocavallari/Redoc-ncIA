@@ -11,7 +11,7 @@
 import {ai} from '@/ai/ai-instance';
 import {z} from 'genkit';
 
-// Updated Input Schema to match the new prompt structure
+// Updated Input Schema to include optional file attachment
 const GenerateLessonPlanInputSchema = z.object({
   disciplina: z.string().describe('Nome da Disciplina.'),
   anoSerie: z.string().describe('Ano/Série (ex: 8º ano do Ensino Fundamental).'),
@@ -21,6 +21,12 @@ const GenerateLessonPlanInputSchema = z.object({
   orientacoesAdicionais: z
     .string()
     .describe('Orientações adicionais inseridas pelo usuário.')
+    .optional(),
+  materialDigitalDataUri: z
+    .string()
+    .describe(
+      "Opcional: Material digital em anexo (ex: PDF da aula SEDUC) como um data URI. Formato esperado: 'data:<mimetype>;base64,<encoded_data>'."
+    )
     .optional(),
 });
 export type GenerateLessonPlanInput = z.infer<typeof GenerateLessonPlanInputSchema>;
@@ -35,7 +41,7 @@ export async function generateLessonPlan(input: GenerateLessonPlanInput): Promis
   return generateLessonPlanFlow(input);
 }
 
-// Updated Prompt using the provided structure for Gemini
+// Updated Prompt using the provided structure for Gemini and including the optional file attachment
 const prompt = ai.definePrompt({
   name: 'generateLessonPlanPrompt',
   input: {
@@ -55,6 +61,10 @@ Conteúdo: {{{conteudo}}}
 Duração Estimada da Aula: {{{aulaDuracao}}}
 {{#if orientacoesAdicionais}}
 Orientações Adicionais: {{{orientacoesAdicionais}}}
+{{/if}}
+{{#if materialDigitalDataUri}}
+Material Digital de Referência (SEDUC-SP): {{media url=materialDigitalDataUri}}
+Instrução Adicional: Utilize o arquivo em anexo para consulta do andamento sugerido pela SEDUC-SP ao elaborar o plano.
 {{/if}}
 
 Estrutura Obrigatória da Resposta:
@@ -108,6 +118,12 @@ const generateLessonPlanFlow = ai.defineFlow<
   inputSchema: GenerateLessonPlanInputSchema,
   outputSchema: GenerateLessonPlanOutputSchema,
 }, async input => {
+  // Log input including whether the material URI is present (optional)
+  console.log("Generating lesson plan with input:", {
+        ...input,
+        materialDigitalDataUri: input.materialDigitalDataUri ? `Present (length: ${input.materialDigitalDataUri.length})` : 'Not provided',
+   });
+
   const {output} = await prompt(input);
   // Ensure the output format is strictly adhered to, although the prompt guides it.
   // Basic validation could be added here if needed, but relying on the prompt for structure.
