@@ -8,17 +8,22 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { useToast } from "@/hooks/use-toast";
-import { Upload, KeyRound, ArrowLeft, BookOpenCheck } from 'lucide-react';
+import { Upload, KeyRound, ArrowLeft, BookOpenCheck, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
-// Changed storage key to reflect Google GenAI API key
+
+// Local storage key can still be used for display/reference, but the hardcoded key is used by Genkit
 const API_KEY_STORAGE_KEY = 'google_genai_api_key';
+// Display the currently hardcoded key for reference (masked for security)
+const HARDCODED_API_KEY_DISPLAY = 'AIzaSyD...nhUYI'; // Masked version
 
 export default function SettingsPage() {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-  const [apiKey, setApiKey] = useState('');
+  // State now primarily for display or potential future overrides
+  const [apiKeyInput, setApiKeyInput] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isSavingKey, setIsSavingKey] = useState(false);
@@ -31,12 +36,10 @@ export default function SettingsPage() {
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    // Load saved API key from localStorage on mount (client-side only)
+    // Load saved API key from localStorage on mount for the input field (display only)
     if (typeof window !== 'undefined') {
         const savedKey = localStorage.getItem(API_KEY_STORAGE_KEY);
-        if (savedKey) {
-          setApiKey(savedKey);
-        }
+        setApiKeyInput(savedKey || ''); // Pre-fill input if a key was previously saved
     }
   }, []);
 
@@ -94,32 +97,28 @@ export default function SettingsPage() {
   };
 
   const handleSaveApiKey = async () => {
-     if (!apiKey.trim()) {
+     // Saving to localStorage is now less critical as the key is hardcoded
+     // This function might be kept for future flexibility or removed.
+     // For now, it just updates the localStorage value.
+     if (!apiKeyInput.trim()) {
         toast({
            title: "Chave API Inválida",
-           description: "Por favor, insira uma chave de API válida.",
+           description: "Por favor, insira uma chave de API válida no campo (para referência).",
            variant: "destructive",
          });
          return;
      }
     setIsSavingKey(true);
-    // Simulate saving process
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Save to localStorage (client-side only)
      if (typeof window !== 'undefined') {
-        localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
-        // Optionally, set the key in the environment for the backend/server actions if needed
-        // This client-side saving won't make it available to server components directly
-        // A proper solution might involve an API endpoint to securely store the key server-side.
-        console.warn("API key saved to localStorage. For server-side Genkit usage, ensure the GOOGLE_GENAI_API_KEY environment variable is set.")
+        localStorage.setItem(API_KEY_STORAGE_KEY, apiKeyInput);
      }
-
 
     setIsSavingKey(false);
     toast({
-      title: "Chave API Salva",
-       description: "A chave da API Google GenAI foi salva localmente (simulação).", // Updated text
+      title: "Chave API Atualizada (Localmente)",
+       description: "A chave no campo foi salva localmente para referência.", // Updated text
     });
   };
 
@@ -160,7 +159,7 @@ export default function SettingsPage() {
                 Upload do Escopo-Sequência
               </CardTitle>
               <CardDescription>
-                Faça o upload do arquivo (.csv ou .xlsx) contendo os dados de disciplinas, anos, conteúdos e habilidades.
+                Faça o upload do arquivo (.csv ou .xlsx) contendo os dados de disciplinas, anos, conteúdos e habilidades (funcionalidade simulada).
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -181,7 +180,7 @@ export default function SettingsPage() {
                 disabled={!selectedFile || isUploading}
                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
               >
-                {isUploading ? 'Enviando...' : 'Fazer Upload'}
+                {isUploading ? 'Enviando...' : 'Fazer Upload (Simulado)'}
               </Button>
             </CardContent>
           </Card>
@@ -193,28 +192,35 @@ export default function SettingsPage() {
                 <KeyRound className="h-6 w-6 text-primary" />
                 Chave de API Google GenAI (Gemini)
               </CardTitle>
-              <CardDescription>
-                Insira sua chave de API do Google GenAI (necessária para usar o Gemini) para habilitar a geração de planos de aula. A chave será salva localmente no seu navegador.
+               <Alert variant="destructive" className="mt-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  {/* <AlertTitle>Atenção</AlertTitle> */}
+                  <AlertDescription>
+                     A chave de API está atualmente codificada diretamente em <code>src/ai/ai-instance.ts</code>. O campo abaixo é apenas para referência ou futuras modificações. A chave ativa é: <strong>{HARDCODED_API_KEY_DISPLAY}</strong>.
+                  </AlertDescription>
+                </Alert>
+              <CardDescription className="pt-2">
+                Para alterar a chave ativa, edite o arquivo <code>src/ai/ai-instance.ts</code>. Salvar aqui apenas atualiza o valor localmente para referência.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="apiKey">Chave da API</Label>
+                <Label htmlFor="apiKeyInput">Chave da API (Referência)</Label>
                 <Input
-                  id="apiKey"
-                  type="password" // Use password type to mask the key
-                  placeholder="Sua chave da API do Google GenAI..."
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
+                  id="apiKeyInput"
+                  type="password" // Keep as password for masking
+                  placeholder="Chave salva localmente (se houver)..."
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
                    disabled={isSavingKey}
                 />
               </div>
               <Button
                 onClick={handleSaveApiKey}
                 disabled={isSavingKey}
-                 className="w-full bg-accent text-accent-foreground hover:bg-accent/90" // Use accent color for save
+                 className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
               >
-                 {isSavingKey ? 'Salvando...' : 'Salvar Chave'}
+                 {isSavingKey ? 'Salvando Localmente...' : 'Salvar Chave (Localmente)'}
               </Button>
             </CardContent>
           </Card>
