@@ -46,9 +46,9 @@ export default function Header() {
         {/* Logo */}
         <Link href={isClient && user ? "/dashboard" : "/login"} className="flex items-center gap-2" aria-label="Página Inicial">
            <Image
-              src="https://i.imgur.com/m4Wcex5.png" // Updated logo URL
-              width={40} // Adjusted width for the new logo
-              height={40} // Adjusted height for the new logo
+              src="https://i.imgur.com/m4Wcex5.png" // Keep current logo
+              width={68} // Increased width by 70% (40 * 1.7)
+              height={68} // Increased height by 70% (40 * 1.7)
               alt="Redocência Logo"
               priority // Prioritize loading the logo
             />
@@ -125,4 +125,3 @@ export default function Header() {
     </header>
   );
 }
-

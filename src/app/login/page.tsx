@@ -49,9 +49,9 @@ export default function LoginPage() {
            {/* Add the logo here */}
            <div className="flex justify-center">
               <Image
-                src="https://i.imgur.com/m4Wcex5.png" // Updated logo URL
-                width={80} // Adjust width as needed for login page
-                height={80} // Adjust height as needed for login page
+                src="https://i.imgur.com/uo4OdVQ.png" // Use the new logo URL
+                width={80} // Keep current width or adjust as needed
+                height={80} // Keep current height or adjust as needed
                 alt="Redocência Logo"
                 priority
               />
@@ -101,4 +101,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
