@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { List, ArrowLeft, Download, FileText, FileType, Pencil, Trash2, BookOpenCheck } from 'lucide-react'; // Added BookOpenCheck, Pencil, Trash2
+import { List, ArrowLeft, Download, FileText, FileType, Pencil, Trash2 } from 'lucide-react'; // Removed BookOpenCheck
 import { getPlansForUser, deletePlan, type SavedPlan, getPlanById } from '@/services/saved-plans';
 import { useToast } from "@/hooks/use-toast";
 import { format, formatDistanceToNow } from 'date-fns';
@@ -118,12 +118,9 @@ export default function SavedPlansPage() {
   if (authLoading || !user) {
     return (
        <div className="flex min-h-screen items-center justify-center">
-          {/* Use consistent full page loading skeleton */}
-          <div className="flex min-h-screen flex-col bg-secondary w-full">
-             <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6 shadow-sm">
-                 <div className="flex items-center gap-4"> <div className="w-10 h-10"></div> <div className="flex items-center gap-2"> <BookOpenCheck className="h-7 w-7 text-primary" /> <h1 className="text-xl font-semibold text-primary">redocêncIA</h1> </div> </div>
-                 <div className="flex items-center gap-4"> <Skeleton className="h-5 w-24 hidden sm:inline" /> <Skeleton className="h-8 w-8 rounded-full" /> <Skeleton className="h-8 w-8 rounded-full" /> <Skeleton className="h-8 w-8 rounded-full" /> </div>
-             </header>
+          {/* Use consistent full page loading skeleton - Header is now global */}
+          <div className="flex flex-col bg-secondary flex-1 w-full">
+             {/* Header is rendered by RootLayout, no need for skeleton here */}
              <main className="flex-1 p-4 md:p-6 lg:p-8">
                 <Skeleton className="h-8 w-48 mb-6" /> {/* Title skeleton */}
                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

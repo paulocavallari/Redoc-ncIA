@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react'; // Import useState, useEffect
@@ -6,7 +7,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Settings, LogOut, BookOpenCheck, List, ArrowLeft } from 'lucide-react';
+import { Settings, LogOut, List, ArrowLeft } from 'lucide-react';
+import Image from 'next/image'; // Import next/image
 
 export default function Header() {
   const { user, logout, isLoading: authLoading } = useAuth();
@@ -23,10 +25,6 @@ export default function Header() {
   const minimalHeaderPages = ['/']; // Add any pages needing only the title
 
   // Determine visibility based on client-side state and pathname
-  // Render nothing during SSR or initial client render before useEffect runs
-  // Also hide on specific pages determined by pathname
-  const isHeaderHidden = !isClient || noHeaderPages.includes(pathname);
-
   const showFullHeader = isClient && !minimalHeaderPages.includes(pathname) && !noHeaderPages.includes(pathname);
   const showBackButton = isClient && ['/settings', '/saved-plans'].includes(pathname);
 
@@ -34,55 +32,38 @@ export default function Header() {
       router.back(); // Go back to the previous page
   };
 
-  // Render nothing until client-side hydration is complete or if on a no-header page
-  if (!isClient) {
-     // Render a placeholder skeleton that matches the structure but avoids client-specific logic
-     // This helps prevent the hydration mismatch.
-     return (
-         <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6 shadow-sm">
-            {/* Placeholder content */}
-            <div className="flex items-center gap-4">
-                {/* Simulate potential back button space */}
-                <div className="w-10 h-10"></div>
-                <div className="flex items-center gap-2">
-                    <BookOpenCheck className="h-7 w-7 text-primary" />
-                    <h1 className="text-xl font-semibold text-primary">redocêncIA</h1>
-                </div>
-            </div>
-             <div className="flex items-center gap-4">
-                 <Skeleton className="h-5 w-24 hidden sm:inline" />
-                 <Skeleton className="h-8 w-8 rounded-full" />
-                 <Skeleton className="h-8 w-8 rounded-full" />
-                 <Skeleton className="h-8 w-8 rounded-full" />
-             </div>
-         </header>
-     );
-  }
-
-  if (isHeaderHidden) {
-     return null;
-  }
-
-
+  // Render a consistent header structure for SSR to avoid hydration mismatch
+  // Content visibility will be handled client-side.
   return (
     <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6 shadow-sm">
       <div className="flex items-center gap-4">
-        {showBackButton && (
+        {/* Back button placeholder (conditionally rendered client-side) */}
+        {showBackButton && isClient && (
              <Button variant="outline" size="icon" onClick={handleBack} aria-label="Voltar">
                <ArrowLeft className="h-5 w-5" />
              </Button>
         )}
-        <Link href={user ? "/dashboard" : "/login"} className="flex items-center gap-2" aria-label="Página Inicial">
-          <BookOpenCheck className="h-7 w-7 text-primary" />
-          <h1 className="text-xl font-semibold text-primary">redocêncIA</h1>
+        {/* Logo */}
+        <Link href={isClient && user ? "/dashboard" : "/login"} className="flex items-center gap-2" aria-label="Página Inicial">
+           <Image
+              src="https://picsum.photos/150/40" // Placeholder image URL
+              width={150} // Adjust width as needed
+              height={40} // Adjust height as needed
+              alt="Redocência Logo"
+              data-ai-hint="brain book logo" // AI Hint for image replacement
+              priority // Prioritize loading the logo
+            />
         </Link>
       </div>
 
-      {showFullHeader && (
-        <div className="flex items-center gap-4">
-          {authLoading ? (
+      {/* Right side content */}
+      <div className="flex items-center gap-4">
+        {/* Conditional rendering based on client-side state */}
+        {isClient && showFullHeader ? (
+          authLoading ? (
             <>
               <Skeleton className="h-5 w-24 hidden sm:inline" />
+              <Skeleton className="h-8 w-8 rounded-full" />
               <Skeleton className="h-8 w-8 rounded-full" />
               <Skeleton className="h-8 w-8 rounded-full" />
             </>
@@ -108,7 +89,6 @@ export default function Header() {
               </Button>
             </>
           ) : (
-            // Optional: Add login/register buttons if user is not logged in and header is shown
              <>
               <Link href="/login" passHref>
                  <Button variant="outline" size="sm">Entrar</Button>
@@ -117,9 +97,30 @@ export default function Header() {
                  <Button variant="default" size="sm">Cadastrar</Button>
                </Link>
              </>
-          )}
-        </div>
-      )}
+          )
+        ) : isClient && !showFullHeader ? (
+            // Render login/register buttons on login/register pages if needed
+            // Or render nothing if it's a minimal header page
+            !noHeaderPages.includes(pathname) ? (
+                <>
+                 <Link href="/login" passHref>
+                    <Button variant="outline" size="sm">Entrar</Button>
+                  </Link>
+                  <Link href="/register" passHref>
+                    <Button variant="default" size="sm">Cadastrar</Button>
+                  </Link>
+                </>
+            ) : null
+        ) : (
+          // SSR/Loading Skeleton for the right side
+          <>
+            <Skeleton className="h-5 w-24 hidden sm:inline" />
+            <Skeleton className="h-8 w-8 rounded-full" />
+            <Skeleton className="h-8 w-8 rounded-full" />
+            <Skeleton className="h-8 w-8 rounded-full" />
+          </>
+        )}
+      </div>
     </header>
   );
 }

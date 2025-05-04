@@ -1,23 +1,28 @@
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { BookOpenCheck } from "lucide-react";
+import Image from "next/image"; // Import next/image
 
 export default function DashboardLoading() {
   return (
      <div className="flex min-h-screen flex-col bg-secondary">
-      {/* Header Skeleton */}
-      <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6 shadow-sm">
+      {/* Header Skeleton - Now handled by global Header */}
+      {/* <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6 shadow-sm">
          <div className="flex items-center gap-2">
-            <BookOpenCheck className="h-7 w-7 text-primary" />
-             <Skeleton className="h-6 w-32" />
+             <Image
+              src="https://picsum.photos/150/40" // Placeholder
+              width={150}
+              height={40}
+              alt="Redocência Logo Skeleton"
+              priority
+            />
          </div>
         <div className="flex items-center gap-4">
            <Skeleton className="h-5 w-24 hidden sm:inline" />
            <Skeleton className="h-8 w-8 rounded-full" />
            <Skeleton className="h-8 w-8 rounded-full" />
         </div>
-      </header>
+      </header> */}
 
        {/* Main Content Skeleton */}
        <main className="flex-1 p-4 md:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-2 gap-6">

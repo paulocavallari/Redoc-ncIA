@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState } from 'react';
@@ -9,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { useToast } from "@/hooks/use-toast";
-import { BookOpenCheck } from 'lucide-react'; // Icon for the app title
+import Image from 'next/image'; // Import next/image
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -44,8 +45,18 @@ export default function LoginPage() {
   return (
     <div className="flex flex-1 items-center justify-center bg-secondary p-4"> {/* Changed min-h-screen to flex-1 */}
       <Card className="w-full max-w-md shadow-lg">
-        <CardHeader className="text-center">
-           {/* Removed the header icon/title duplication */}
+        <CardHeader className="text-center space-y-4"> {/* Added space-y-4 */}
+           {/* Add the logo here */}
+           <div className="flex justify-center">
+              <Image
+                src="https://picsum.photos/200/80" // Placeholder image URL
+                width={200} // Adjust width as needed
+                height={80} // Adjust height as needed
+                alt="Redocência Logo"
+                data-ai-hint="brain book logo" // AI Hint for image replacement
+                priority
+              />
+           </div>
           <CardDescription>Entre para planejar suas aulas com IA</CardDescription>
         </CardHeader>
         <CardContent>
