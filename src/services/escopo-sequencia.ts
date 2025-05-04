@@ -90,7 +90,7 @@ const MANDATORY_KEYS: (keyof EscopoSequenciaItem)[] = ['anoSerie', 'bimestre', '
  */
 function findHeader(headers: string[], possibleNames: string[] | undefined): string | undefined {
   if (!possibleNames) return undefined;
-  const lowerCaseHeaders = headers.map(h => h ? h.toLowerCase() : ''); // Handle potential null/undefined headers
+  const lowerCaseHeaders = headers.map(h => h ? String(h).trim().toLowerCase() : ''); // Handle potential null/undefined headers and trim
   for (const name of possibleNames) {
     const lowerCaseName = name.toLowerCase();
     const index = lowerCaseHeaders.indexOf(lowerCaseName);
@@ -146,9 +146,9 @@ function findAndMapHeaders(jsonData: any[][], sheetName: string): { headerMap: {
     let foundHeadersLog: string[] = [];
      Object.keys(POSSIBLE_HEADERS).forEach(key => {
         const mappedHeader = findHeader(headers, POSSIBLE_HEADERS[key as keyof EscopoSequenciaItem]);
-        headerMap[key as keyof EscopoSequenciaItem] = mappedHeader;
-        if(mappedHeader) {
-            foundHeadersLog.push(`${key}:'${mappedHeader}'`);
+        if (mappedHeader) { // Only map if found
+           headerMap[key as keyof EscopoSequenciaItem] = mappedHeader;
+           foundHeadersLog.push(`${key}:'${mappedHeader}'`);
         }
     });
 
@@ -156,7 +156,7 @@ function findAndMapHeaders(jsonData: any[][], sheetName: string): { headerMap: {
     const missingHeaders = MANDATORY_KEYS.filter(key => !headerMap[key]);
     if (missingHeaders.length > 0) {
       // Improved error logging
-      console.error(`Sheet "${sheetName}" (header row ${headerIndex + 1}) is missing required columns: ${missingHeaders.join(', ')}. Headers Found: [${foundHeadersLog.join(', ')}]. Full Row: [${headers.join(', ')}]`);
+      console.error(`Sheet "${sheetName}" (header row ${headerIndex + 1}) is missing required columns: ${missingHeaders.join(', ')}. Possible headers looked for: ${MANDATORY_KEYS.map(k => `[${k}: ${POSSIBLE_HEADERS[k]?.join('/')}]`).join(' ')}. Headers Found in Row: [${headers.join(', ')}]`);
       console.warn(`Skipping sheet "${sheetName}" due to missing required columns.`);
       return null; // Return null if mandatory headers are missing
     }
@@ -195,10 +195,18 @@ export function processEscopoFile(fileData: ArrayBuffer): EscopoSequenciaItem[] 
         return; // Skip if sheet is somehow invalid
     }
 
-    const jsonData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false }); // Read as array of arrays, skip blank rows
+    // Attempt to determine the range of the sheet to avoid reading excessive empty cells
+    const range = XLSX.utils.decode_range(worksheet['!ref'] || "A1:Z1000"); // Use "!ref" or fallback
+    const jsonData: any[][] = XLSX.utils.sheet_to_json(worksheet, {
+        header: 1,
+        blankrows: false,
+        range: `A${range.s.r + 1}:${XLSX.utils.encode_col(range.e.c)}${range.e.r + 1}` // Explicit range based on detected bounds
+     });
+
+    // const jsonData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false }); // Read as array of arrays, skip blank rows
 
     if (!jsonData || jsonData.length < 1) { // Need at least one row (potentially header)
-      console.warn(`Skipping sheet "${sheetName}" due to insufficient data (no rows found).`);
+      console.warn(`Skipping sheet "${trimmedSheetName}" due to insufficient data (no rows found).`);
       return;
     }
 
@@ -215,7 +223,7 @@ export function processEscopoFile(fileData: ArrayBuffer): EscopoSequenciaItem[] 
       const row = jsonData[i];
        // Skip if row is completely empty or doesn't seem like a valid data row based on number of columns
        if (!Array.isArray(row) || row.length === 0 || row.every((cell: any) => cell === null || String(cell).trim() === '')) {
-            console.log(`Skipping empty row ${i + 1} in sheet "${trimmedSheetName}".`);
+            // console.log(`Skipping empty row ${i + 1} in sheet "${trimmedSheetName}".`); // Less verbose
             continue;
        }
 
@@ -245,7 +253,7 @@ export function processEscopoFile(fileData: ArrayBuffer): EscopoSequenciaItem[] 
                  // Set default empty string for missing *mandatory* data in a row
                  if (MANDATORY_KEYS.includes(itemKey)) {
                      item[itemKey] = '';
-                      console.warn(`Row ${i + 1} in sheet "${trimmedSheetName}" has empty/null value for mandatory column '${headerName}'. Setting empty string.`);
+                    //   console.warn(`Row ${i + 1} in sheet "${trimmedSheetName}" has empty/null value for mandatory column '${headerName}'. Setting empty string.`); // Less verbose
                  }
                  // Optional 'objetivos' will remain undefined if cell is empty/null
              }
@@ -260,7 +268,7 @@ export function processEscopoFile(fileData: ArrayBuffer): EscopoSequenciaItem[] 
        } else {
             // Log skipped rows with more context
             const missingFields = MANDATORY_KEYS.filter(key => item[key] === undefined || item[key] === '').join(', ');
-            console.warn(`Skipping row ${i+1} in sheet "${trimmedSheetName}" due to missing/empty essential data after processing. Missing fields: [${missingFields}]. Processed Item:`, JSON.stringify(item), "Original Row:", JSON.stringify(row));
+            // console.warn(`Skipping row ${i+1} in sheet "${trimmedSheetName}" due to missing/empty essential data after processing. Missing fields: [${missingFields}]. Processed Item:`, JSON.stringify(item), "Original Row:", JSON.stringify(row)); // Less verbose
        }
     }
   });
@@ -310,7 +318,7 @@ export function getEscopoDataFromStorage(level: EducationLevel): EscopoSequencia
     if (storedData) {
       try {
         const data = JSON.parse(storedData);
-         console.log(`Loaded ${data.length} escopo items for level "${level}" from localStorage key "${storageKey}".`);
+         // console.log(`Loaded ${data.length} escopo items for level "${level}" from localStorage key "${storageKey}".`); // Less verbose
         // Basic validation: check if it's an array
         return Array.isArray(data) ? data : [];
       } catch (error) {
