@@ -28,10 +28,12 @@ export default function DashboardLoading() {
               <Skeleton className="h-4 w-64" />
             </CardHeader>
             <CardContent className="space-y-4">
-              {[...Array(8)].map((_, i) => ( // Increased to 8 to include Bimestre
+              {/* Adjusted count to 9 fields: Year, Subject, Bimester, Knowledge Object, Skill (Radio), Derived Content, Duration, Instructions, Button */}
+              {[...Array(9)].map((_, i) => (
                 <div key={i} className="space-y-2">
                   <Skeleton className="h-4 w-1/4" />
-                  <Skeleton className="h-10 w-full" />
+                  {/* Simulate different heights for inputs/selects/textarea/radio */}
+                  <Skeleton className={`h-${i === 5 ? 12 : i === 7 ? 20 : 10} w-full`} />
                 </div>
               ))}
               <Skeleton className="h-10 w-full mt-4" />
@@ -60,3 +62,4 @@ export default function DashboardLoading() {
      </div>
   );
 }
+

@@ -84,7 +84,7 @@ export default function DashboardPage() {
   const [yearSeries, setYearSeries] = useState('');
   const [subject, setSubject] = useState(''); // 'disciplina' in Portuguese
   const [bimestre, setBimestre] = useState(''); // New state for Bimester
-  const [content, setContent] = useState(''); // 'conteudo' in Portuguese - Now derived from knowledge object
+  const [content, setContent] = useState(''); // 'conteudo' in Portuguese - Now derived from skill
   const [knowledgeObject, setKnowledgeObject] = useState(''); // New state for 'objetosDoConhecimento'
   const [selectedSkill, setSelectedSkill] = useState<string>('');
   const [aulaDuracao, setAulaDuracao] = useState<string>('');
