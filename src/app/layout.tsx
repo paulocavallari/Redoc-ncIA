@@ -17,7 +17,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR"> {/* Set language to Brazilian Portuguese */}
+    // Set language to Brazilian Portuguese
+    <html lang="pt-BR">
       <body className={`${inter.variable} font-sans antialiased`}>
         <AuthProvider>
           {children}
