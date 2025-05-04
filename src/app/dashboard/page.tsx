@@ -10,10 +10,10 @@ import { Input } from '@/components/ui/input'; // Added Input
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Settings, LogOut, BookOpenCheck, GraduationCap, BookCopy, Target, ListChecks, MessageSquare, Bot, Clock, CalendarDays, Layers, Paperclip, AlertTriangle } from 'lucide-react'; // Added Layers, Paperclip, AlertTriangle icons
+import { Settings, LogOut, BookOpenCheck, GraduationCap, BookCopy, Target, ListChecks, MessageSquare, Bot, Clock, CalendarDays, Layers, Paperclip, AlertTriangle, Library } from 'lucide-react'; // Added Layers, Paperclip, AlertTriangle, Library icons
 import {
     getAllEscopoDataFromStorage, // Get data for all levels
     type EscopoSequenciaItem,
@@ -57,9 +57,9 @@ export default function DashboardPage() {
   const [yearSeries, setYearSeries] = useState(''); // This is now just the number '6', '1', etc.
   const [subject, setSubject] = useState(''); // 'disciplina' in Portuguese
   const [bimestre, setBimestre] = useState(''); // New state for Bimester number '1', '2', etc.
-  const [content, setContent] = useState(''); // 'conteudo' in Portuguese - Now derived from skill
   const [knowledgeObject, setKnowledgeObject] = useState(''); // New state for 'objetosDoConhecimento'
-  const [selectedSkill, setSelectedSkill] = useState<string>('');
+  const [selectedContents, setSelectedContents] = useState<string[]>([]); // Changed to array for multiple selection
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]); // Changed to array for multiple selection
   const [aulaDuracao, setAulaDuracao] = useState<string>('');
   const [additionalInstructions, setAdditionalInstructions] = useState('');
   const [selectedMaterialFile, setSelectedMaterialFile] = useState<File | null>(null); // State for attached file
@@ -153,42 +153,42 @@ export default function DashboardPage() {
         .sort();
    }, [selectedLevel, bimestre, subject, yearSeries, currentLevelData]);
 
-  // Available Skills based on Level, Year, Subject, Bimester, and Knowledge Object
-  const availableSkills = useMemo(() => {
+  // Available Contents based on Level, Year, Subject, Bimester, and Knowledge Object
+  const availableContents = useMemo(() => {
       if (!selectedLevel || !knowledgeObject || !bimestre || !subject || !yearSeries || !currentLevelData.length) return [];
-      // Find items matching the current selection
       const matchingItems = currentLevelData.filter(item =>
           item.anoSerie === yearSeries &&
           item.disciplina === subject &&
-          item.bimestre === bimestre && // Filter by bimestre number
+          item.bimestre === bimestre &&
           item.objetosDoConhecimento === knowledgeObject
       );
-      // Extract unique skills from matching items
-      const skillsSet = new Set<string>();
+      const contentsSet = new Set<string>();
       matchingItems.forEach(item => {
-           if (typeof item.habilidade === 'string') {
-              skillsSet.add(item.habilidade.trim());
+           if (typeof item.conteudo === 'string') {
+              contentsSet.add(item.conteudo.trim());
            }
       });
-      return Array.from(skillsSet).sort();
+      return Array.from(contentsSet).sort();
   }, [selectedLevel, knowledgeObject, bimestre, subject, yearSeries, currentLevelData]);
 
-
-   // Derive Content based on the selected Skill
-    useEffect(() => {
-        if (!selectedSkill || !knowledgeObject || !bimestre || !subject || !yearSeries || !selectedLevel || !currentLevelData.length) {
-            setContent('');
-            return;
-        }
-        const matchingItem = currentLevelData.find(item =>
-            item.anoSerie === yearSeries &&
-            item.disciplina === subject &&
-            item.bimestre === bimestre &&
-            item.objetosDoConhecimento === knowledgeObject &&
-            item.habilidade === selectedSkill // Match based on selected skill now
-        );
-        setContent(matchingItem?.conteudo || ''); // Set content from the match, or empty if none
-    }, [selectedSkill, knowledgeObject, bimestre, subject, yearSeries, selectedLevel, currentLevelData]);
+   // Available Skills based on selected Contents
+   const availableSkills = useMemo(() => {
+       if (!selectedLevel || !knowledgeObject || !bimestre || !subject || !yearSeries || !currentLevelData.length || selectedContents.length === 0) return [];
+       const skillsSet = new Set<string>();
+       const matchingItems = currentLevelData.filter(item =>
+           item.anoSerie === yearSeries &&
+           item.disciplina === subject &&
+           item.bimestre === bimestre &&
+           item.objetosDoConhecimento === knowledgeObject &&
+           selectedContents.includes(item.conteudo) // Filter by selected contents
+       );
+       matchingItems.forEach(item => {
+            if (typeof item.habilidade === 'string') {
+               skillsSet.add(item.habilidade.trim());
+            }
+       });
+       return Array.from(skillsSet).sort();
+   }, [selectedLevel, knowledgeObject, bimestre, subject, yearSeries, currentLevelData, selectedContents]);
 
 
   // --- Reset dependent fields when a higher-level field changes ---
@@ -198,8 +198,8 @@ export default function DashboardPage() {
     setSubject('');
     setBimestre('');
     setKnowledgeObject('');
-    setSelectedSkill('');
-    setContent('');
+    setSelectedContents([]); // Reset contents
+    setSelectedSkills([]); // Reset skills
     setAulaDuracao('');
     setGeneratedPlan('');
     setSuggestedContent([]);
@@ -211,8 +211,8 @@ export default function DashboardPage() {
     setSubject('');
     setBimestre('');
     setKnowledgeObject('');
-    setSelectedSkill('');
-    setContent('');
+    setSelectedContents([]); // Reset contents
+    setSelectedSkills([]); // Reset skills
     setAulaDuracao('');
     setGeneratedPlan('');
     setSuggestedContent([]);
@@ -223,8 +223,8 @@ export default function DashboardPage() {
     setSubject(value);
     setBimestre('');
     setKnowledgeObject('');
-    setSelectedSkill('');
-    setContent('');
+    setSelectedContents([]); // Reset contents
+    setSelectedSkills([]); // Reset skills
     setAulaDuracao('');
     setGeneratedPlan('');
     setSuggestedContent([]);
@@ -234,8 +234,8 @@ export default function DashboardPage() {
   const handleBimestreChange = (value: string) => {
       setBimestre(value);
       setKnowledgeObject('');
-      setSelectedSkill('');
-      setContent('');
+      setSelectedContents([]); // Reset contents
+      setSelectedSkills([]); // Reset skills
       setAulaDuracao('');
       setGeneratedPlan('');
       setSuggestedContent([]);
@@ -244,18 +244,39 @@ export default function DashboardPage() {
 
    const handleKnowledgeObjectChange = (value: string) => {
      setKnowledgeObject(value);
-     setSelectedSkill(''); // Reset skills when knowledge object changes
-     setContent(''); // Reset content, will be updated by useEffect based on skill
+     setSelectedContents([]); // Reset contents when knowledge object changes
+     setSelectedSkills([]); // Reset skills when knowledge object changes
      setAulaDuracao('');
      setGeneratedPlan('');
      setSuggestedContent([]);
      setSelectedMaterialFile(null); // Reset file
    };
 
+   // Handle Content Checkbox Change
+   const handleContentChange = (content: string, checked: boolean) => {
+     setSelectedContents(prev => {
+       const newContents = checked
+         ? [...prev, content]
+         : prev.filter(c => c !== content);
 
-  const handleSkillChange = (skill: string) => {
-    setSelectedSkill(skill);
-     // Content will be updated by the useEffect hook based on the selected skill
+        // IMPORTANT: Reset skills when content selection changes
+        setSelectedSkills([]);
+        setAulaDuracao('');
+        setGeneratedPlan('');
+        setSuggestedContent([]);
+        setSelectedMaterialFile(null); // Reset file
+
+       return newContents;
+     });
+   };
+
+
+  // Handle Skill Checkbox Change
+  const handleSkillChange = (skill: string, checked: boolean) => {
+    setSelectedSkills(prev =>
+      checked ? [...prev, skill] : prev.filter(s => s !== skill)
+    );
+    // Reset dependent fields if skills change significantly (optional, depends on UX)
     setAulaDuracao('');
     setGeneratedPlan('');
     setSuggestedContent([]);
@@ -289,9 +310,22 @@ export default function DashboardPage() {
   }, [selectedLevel]);
 
   // Filter aulaDuracaoOptions based on whether it's Ensino Médio Noturno
-  const currentAulaDuracaoOptions = useMemo(() => {
-      return isEnsinoMedioNoturno ? aulaDuracaoNoturnoOptions : aulaDuracaoOptions;
-  }, [isEnsinoMedioNoturno]);
+   const currentAulaDuracaoOptions = useMemo(() => {
+        // If a level is selected, filter the options
+       if (selectedLevel) {
+          return isEnsinoMedioNoturno ? aulaDuracaoNoturnoOptions : aulaDuracaoOptions;
+       }
+       // If no level is selected yet, show no duration options or a placeholder state
+       return [];
+   }, [selectedLevel, isEnsinoMedioNoturno]);
+
+   // Reset aulaDuracao if the selected option is not available anymore
+    useEffect(() => {
+        if (aulaDuracao && !currentAulaDuracaoOptions.includes(aulaDuracao)) {
+            setAulaDuracao(''); // Reset if the current duration is invalid for the selected level
+        }
+    }, [currentAulaDuracaoOptions, aulaDuracao]);
+
 
    // Helper function to format Year/Series for display
    const formatYearSeriesDisplay = (year: string, level: EducationLevel | ''): string => {
@@ -337,11 +371,11 @@ export default function DashboardPage() {
 
 
   const handleGeneratePlan = async () => {
-    if (!selectedLevel || !subject || !yearSeries || !bimestre || !knowledgeObject || !selectedSkill || !aulaDuracao || !content) {
-      console.error("Por favor, preencha todos os campos obrigatórios (Nível, Ano/Série, Disciplina, Bimestre, Objeto, Habilidade, Duração). Content: ", content);
+    if (!selectedLevel || !subject || !yearSeries || !bimestre || !knowledgeObject || selectedContents.length === 0 || selectedSkills.length === 0 || !aulaDuracao) {
+      console.error("Por favor, preencha todos os campos obrigatórios (Nível, Ano/Série, Disciplina, Bimestre, Objeto, Conteúdo(s), Habilidade(s), Duração).");
       toast({
           title: "Campos Obrigatórios",
-          description: "Preencha todos os campos com '*' para gerar o plano.",
+          description: "Preencha todos os campos com '*' e selecione ao menos um Conteúdo e uma Habilidade para gerar o plano.",
           variant: "destructive",
       });
       return;
@@ -371,11 +405,16 @@ export default function DashboardPage() {
     }
     setReadingFile(false); // Finish file reading indication
 
+    // Format selected contents and skills as comma-separated strings for the AI
+    const formattedContents = selectedContents.join(', ');
+    const formattedSkills = selectedSkills.join(', ');
+
+
     const input: GenerateLessonPlanInput = {
       disciplina: subject,
       anoSerie: fullYearSeriesString, // Use the fully constructed string
-      habilidade: selectedSkill,
-      conteudo: content, // Use the derived content based on skill
+      habilidade: formattedSkills, // Pass comma-separated skills
+      conteudo: formattedContents, // Pass comma-separated contents
       aulaDuracao: aulaDuracao,
       orientacoesAdicionais: additionalInstructions || undefined,
       materialDigitalDataUri: materialDataUri, // Pass the data URI
@@ -386,7 +425,7 @@ export default function DashboardPage() {
       const response = await generateLessonPlan(input);
       setGeneratedPlan(response.lessonPlan);
 
-      // Suggest additional content based on the derived content and full year string
+      // Suggest additional content based on the formatted contents and full year string
       handleSuggestContent(input.conteudo, input.anoSerie, input.disciplina, response.lessonPlan);
 
     } catch (error) {
@@ -441,7 +480,7 @@ export default function DashboardPage() {
 
    // Consolidate disabling conditions
    const formDisabled = loadingData || generatingPlan || readingFile || showDataMissingAlert;
-   const generateButtonDisabled = formDisabled || !selectedSkill || !aulaDuracao || !content;
+   const generateButtonDisabled = formDisabled || selectedContents.length === 0 || selectedSkills.length === 0 || !aulaDuracao; // Updated condition
 
 
   return (
@@ -624,40 +663,59 @@ export default function DashboardPage() {
               </Select>
             </div>
 
-             {/* Skills (Habilidade) - RadioGroup */}
+             {/* Content (Conteúdo) - Checkboxes */}
+             {availableContents.length > 0 && (
+                 <div className="space-y-2">
+                     <Label className="flex items-center gap-1"><Library className="h-4 w-4" /> Conteúdo(s) *</Label>
+                     <Card className="p-4 bg-muted/50 border border-input">
+                         <ScrollArea className="h-[150px]">
+                             <div className="space-y-2">
+                                 {availableContents.map(contentItem => (
+                                     <div key={contentItem} className="flex items-center space-x-2">
+                                         <Checkbox
+                                             id={`content-${contentItem}`}
+                                             checked={selectedContents.includes(contentItem)}
+                                             onCheckedChange={(checked) => handleContentChange(contentItem, !!checked)}
+                                             disabled={formDisabled || !knowledgeObject}
+                                         />
+                                         <Label htmlFor={`content-${contentItem}`} className="text-sm font-normal cursor-pointer">
+                                             {contentItem}
+                                         </Label>
+                                     </div>
+                                 ))}
+                             </div>
+                         </ScrollArea>
+                     </Card>
+                 </div>
+             )}
+
+
+             {/* Skills (Habilidade) - Checkboxes */}
              {availableSkills.length > 0 && (
                <div className="space-y-2">
-                 <Label className="flex items-center gap-1"><ListChecks className="h-4 w-4" /> Habilidade *</Label>
+                 <Label className="flex items-center gap-1"><ListChecks className="h-4 w-4" /> Habilidade(s) *</Label>
                  <Card className="p-4 bg-muted/50 border border-input">
                    <ScrollArea className="h-[150px]">
-                     <RadioGroup
-                        value={selectedSkill}
-                        onValueChange={handleSkillChange}
-                        disabled={formDisabled || !knowledgeObject} // Depends on knowledge object
-                        className="space-y-2"
-                     >
+                     <div className="space-y-2">
                        {availableSkills.map(skill => (
                          <div key={skill} className="flex items-center space-x-2">
-                           <RadioGroupItem value={skill} id={`skill-${skill}`} />
+                           <Checkbox
+                               id={`skill-${skill}`}
+                               checked={selectedSkills.includes(skill)}
+                               onCheckedChange={(checked) => handleSkillChange(skill, !!checked)}
+                               disabled={formDisabled || selectedContents.length === 0} // Disable if no content selected
+                           />
                            <Label htmlFor={`skill-${skill}`} className="text-sm font-normal cursor-pointer">
                              {skill}
                            </Label>
                          </div>
                        ))}
-                     </RadioGroup>
+                     </div>
                    </ScrollArea>
                  </Card>
+                 {selectedContents.length === 0 && <p className="text-xs text-muted-foreground mt-1">Selecione um conteúdo para ver as habilidades.</p>}
                </div>
              )}
-
-             {/* Derived Content Display (Read-only) */}
-             {content && (
-                 <div className="space-y-1 rounded-md border border-input bg-secondary p-3 text-sm text-secondary-foreground">
-                     <Label className="text-xs font-medium text-muted-foreground">Conteúdo Derivado:</Label>
-                     <p>{content}</p>
-                 </div>
-             )}
-
 
             {/* Lesson Duration (Duração da Aula) */}
              <div className="space-y-2">
@@ -667,14 +725,18 @@ export default function DashboardPage() {
                <Select
                  value={aulaDuracao}
                  onValueChange={handleDurationChange}
-                 // Enable when a skill is selected and content is derived
-                 disabled={formDisabled || !selectedSkill || !content}
+                 // Enable when skills are selected
+                 disabled={formDisabled || selectedSkills.length === 0 || currentAulaDuracaoOptions.length === 0}
                >
                  <SelectTrigger id="aulaDuracao">
-                   <SelectValue placeholder={!selectedSkill || !content ? "Selecione uma habilidade primeiro" : "Selecione a duração"} />
+                   <SelectValue placeholder={
+                       !selectedLevel ? "Selecione o nível primeiro" :
+                       selectedSkills.length === 0 ? "Selecione habilidade(s) primeiro" :
+                       currentAulaDuracaoOptions.length === 0 ? "Nenhuma duração disponível" :
+                       "Selecione a duração"
+                   } />
                  </SelectTrigger>
                  <SelectContent>
-                   {/* Render options based on selected level (Noturno or standard) */}
                    {currentAulaDuracaoOptions.map(dur => (
                      <SelectItem key={dur} value={dur}>{dur}</SelectItem>
                    ))}
@@ -682,6 +744,7 @@ export default function DashboardPage() {
                </Select>
                 {/* Optional: Add a note about Noturno duration */}
                 {isEnsinoMedioNoturno && <p className="text-xs text-muted-foreground mt-1">Durações específicas para Ensino Médio Noturno.</p>}
+                 {!isEnsinoMedioNoturno && selectedLevel && <p className="text-xs text-muted-foreground mt-1">Durações padrão.</p>}
              </div>
 
 
@@ -833,4 +896,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

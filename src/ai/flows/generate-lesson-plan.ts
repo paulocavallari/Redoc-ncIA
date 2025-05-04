@@ -11,12 +11,12 @@
 import {ai} from '@/ai/ai-instance';
 import {z} from 'genkit';
 
-// Updated Input Schema to include optional file attachment
+// Updated Input Schema to include optional file attachment and reflect multiple skills/contents
 const GenerateLessonPlanInputSchema = z.object({
   disciplina: z.string().describe('Nome da Disciplina.'),
   anoSerie: z.string().describe('Ano/Série (ex: 8º ano do Ensino Fundamental).'),
-  habilidade: z.string().describe('Código e/ou descrição completa da Habilidade do Currículo Paulista (ex: EF08MA06).'),
-  conteudo: z.string().describe('Conteúdo específico relacionado à habilidade (ex: Frações e seus significados).'),
+  habilidade: z.string().describe('Código(s) e/ou descrição(ões) completa(s) da(s) Habilidade(s) do Currículo Paulista (pode ser uma lista separada por vírgula, ex: EF08MA06, EF08MA07).'),
+  conteudo: z.string().describe('Conteúdo(s) específico(s) relacionado(s) à habilidade (pode ser uma lista separada por vírgula, ex: Frações e seus significados, Operações com frações).'),
   aulaDuracao: z.string().describe('Duração estimada da aula (ex: 50 minutos ou 2 aulas de 50 minutos).'),
   orientacoesAdicionais: z
     .string()
@@ -129,4 +129,3 @@ const generateLessonPlanFlow = ai.defineFlow<
   // Basic validation could be added here if needed, but relying on the prompt for structure.
   return output!;
 });
-
