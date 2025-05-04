@@ -59,7 +59,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="flex flex-1 items-center justify-center bg-secondary p-4"> {/* Changed min-h-screen to flex-1 */}
+    <div className="flex grow items-center justify-center bg-secondary p-4"> {/* Use grow instead of flex-1 to fill main */}
       <Card className="w-full max-w-md shadow-lg">
          <CardHeader className="text-center space-y-4"> {/* Added space-y-4 */}
             {/* Add the logo here */}
