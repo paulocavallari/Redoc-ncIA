@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { useToast } from "@/hooks/use-toast";
 import Image from 'next/image'; // Import next/image
+import { UserPlus } from 'lucide-react'; // Import UserPlus icon
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
@@ -40,6 +41,15 @@ export default function RegisterPage() {
        });
       return;
     }
+     if (password.length < 6) { // Basic password length validation
+        toast({
+            title: "Erro de Cadastro",
+            description: "A senha deve ter pelo menos 6 caracteres.",
+            variant: "destructive",
+        });
+        return;
+     }
+
 
     const success = await register(name, email, username, password);
     if (success) {
@@ -52,104 +62,122 @@ export default function RegisterPage() {
     } else {
       toast({
         title: "Erro de Cadastro",
-        description: "Não foi possível criar a conta. O nome de usuário pode já existir.",
+        description: "Não foi possível criar a conta. O nome de usuário ou email pode já existir.",
         variant: "destructive",
+        duration: 7000,
       });
     }
   };
 
   return (
-    <div className="flex grow items-center justify-center bg-secondary p-4"> {/* Use grow instead of flex-1 to fill main */}
-      <Card className="w-full max-w-md shadow-lg">
-         <CardHeader className="text-center space-y-4"> {/* Added space-y-4 */}
-            {/* Add the logo here */}
-           <div className="flex justify-center">
-              <Image
-                src="https://i.imgur.com/uo4OdVQ.png" // Use the new logo URL
-                width={136} // Increased width by 70% (80 * 1.7)
-                height={136} // Increased height by 70% (80 * 1.7)
-                alt="Redocência Logo"
-                priority
-              />
-           </div>
-           <CardDescription>Crie sua conta para começar</CardDescription>
-         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleRegister} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Nome Completo</Label>
-              <Input
-                id="name"
-                type="text"
-                placeholder="Seu nome completo"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                disabled={isLoading}
-              />
+     <div className="flex grow items-center justify-center bg-secondary p-4 lg:p-8"> {/* Use secondary background */}
+        <div className="w-full max-w-md">
+            {/* Logo Section */}
+            <div className="flex justify-center mb-8">
+                <Image
+                    src="https://i.imgur.com/uo4OdVQ.png" // Logo URL
+                    width={136} // Original size
+                    height={136} // Original size
+                    alt="Redocência Logo"
+                    priority
+                 />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="seu@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={isLoading}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="username">Usuário</Label>
-              <Input
-                id="username"
-                type="text"
-                placeholder="Escolha um nome de usuário"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-                disabled={isLoading}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Crie uma senha"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={isLoading}
-              />
-            </div>
-             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirmar Senha</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                placeholder="Confirme sua senha"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                disabled={isLoading}
-              />
-            </div>
-            <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isLoading}>
-              {isLoading ? 'Cadastrando...' : 'Cadastrar'}
-            </Button>
-          </form>
-        </CardContent>
-        <CardFooter className="flex justify-center text-sm">
-          <p className="text-muted-foreground">
-            Já tem uma conta?{' '}
-            <Link href="/login" className="text-primary hover:underline font-medium">
-              Faça Login
-            </Link>
-          </p>
-        </CardFooter>
-      </Card>
-    </div>
+
+            {/* Card Section */}
+             <Card className="shadow-xl border-none rounded-lg overflow-hidden"> {/* Enhanced card styling */}
+                 <CardHeader className="bg-card p-6"> {/* Header background */}
+                    <CardTitle className="text-2xl font-bold text-center text-card-foreground flex items-center justify-center gap-2">
+                        <UserPlus className="h-6 w-6" /> {/* Add UserPlus Icon */}
+                        Criar Nova Conta
+                    </CardTitle>
+                    <CardDescription className="text-center pt-1 text-muted-foreground">
+                        Preencha os campos abaixo para se registrar
+                    </CardDescription>
+                 </CardHeader>
+                 <CardContent className="p-6 space-y-6 bg-background"> {/* Content background */}
+                  <form onSubmit={handleRegister} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Nome Completo</Label>
+                      <Input
+                        id="name"
+                        type="text"
+                        placeholder="Seu nome completo"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        required
+                        disabled={isLoading}
+                        className="text-base" // Ensure text size consistency
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="seu@email.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        disabled={isLoading}
+                        className="text-base" // Ensure text size consistency
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="username">Usuário</Label>
+                      <Input
+                        id="username"
+                        type="text"
+                        placeholder="Escolha um nome de usuário"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        required
+                        disabled={isLoading}
+                        className="text-base" // Ensure text size consistency
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Senha</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        placeholder="Crie uma senha (mín. 6 caracteres)"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        minLength={6}
+                        disabled={isLoading}
+                        className="text-base" // Ensure text size consistency
+                      />
+                    </div>
+                     <div className="space-y-2">
+                      <Label htmlFor="confirmPassword">Confirmar Senha</Label>
+                      <Input
+                        id="confirmPassword"
+                        type="password"
+                        placeholder="Confirme sua senha"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                        minLength={6}
+                        disabled={isLoading}
+                        className="text-base" // Ensure text size consistency
+                      />
+                    </div>
+                    <Button type="submit" className="w-full text-base py-3 bg-primary hover:bg-primary/90 text-primary-foreground mt-4" disabled={isLoading}>
+                      {isLoading ? 'Cadastrando...' : 'Cadastrar'}
+                    </Button>
+                  </form>
+                 </CardContent>
+                 <CardFooter className="flex justify-center text-sm p-4 bg-muted/50"> {/* Footer background */}
+                  <p className="text-muted-foreground">
+                    Já tem uma conta?{' '}
+                    <Link href="/login" className="text-primary hover:underline font-semibold">
+                      Faça Login
+                    </Link>
+                  </p>
+                 </CardFooter>
+             </Card>
+        </div>
+     </div>
   );
 }
