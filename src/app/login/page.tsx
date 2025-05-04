@@ -49,7 +49,7 @@ export default function LoginPage() {
            {/* Add the logo here */}
            <div className="flex justify-center">
               <Image
-                src="/logo.png" // Use the actual logo path
+                src="https://i.imgur.com/uo4OdVQ.png" // Use the Imgur logo path
                 width={200} // Adjust width as needed
                 height={80} // Adjust height as needed (maintain aspect ratio if possible)
                 alt="Redocência Logo"

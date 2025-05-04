@@ -46,7 +46,7 @@ export default function Header() {
         {/* Logo */}
         <Link href={isClient && user ? "/dashboard" : "/login"} className="flex items-center gap-2" aria-label="Página Inicial">
            <Image
-              src="/logo.png" // Use the actual logo path
+              src="https://i.imgur.com/uo4OdVQ.png" // Use the Imgur logo path
               width={150} // Adjust width as needed
               height={40} // Adjust height as needed (maintain aspect ratio)
               alt="Redocência Logo"
