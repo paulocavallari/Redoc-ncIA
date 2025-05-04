@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { List, ArrowLeft, Download, FileText, FileType, Pencil, Trash2 } from 'lucide-react'; // Removed BookOpenCheck
+import { Save, ArrowLeft, Download, FileText, FileType, Pencil, Trash2 } from 'lucide-react'; // Changed List to Save
 import { getPlansForUser, deletePlan, type SavedPlan, getPlanById } from '@/services/saved-plans';
 import { useToast } from "@/hooks/use-toast";
 import { format, formatDistanceToNow } from 'date-fns';
@@ -190,7 +190,7 @@ export default function SavedPlansPage() {
              </div>
          ) : savedPlans.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground mt-16">
-                <List className="h-16 w-16 mb-4" />
+                <Save className="h-16 w-16 mb-4" /> {/* Changed List to Save */}
                 <h2 className="text-xl font-semibold mb-2">Nenhum Plano Salvo</h2>
                 <p>Você ainda não salvou nenhum plano de aula.</p>
                 <Link href="/dashboard" passHref>
