@@ -19,8 +19,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // Set language to Brazilian Portuguese
     <html lang="pt-BR">
+      {/* Set language to Brazilian Portuguese */}
       <body className={`${inter.variable} font-sans antialiased flex flex-col min-h-screen`}>
         <AuthProvider>
            {/* Suspense is needed because Header uses hooks like usePathname */}

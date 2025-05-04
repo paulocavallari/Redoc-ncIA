@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react'; // Import useState, useEffect
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,22 +12,56 @@ export default function Header() {
   const { user, logout, isLoading: authLoading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const [isClient, setIsClient] = useState(false); // State to track client-side mount
+
+  useEffect(() => {
+    setIsClient(true); // Set to true only on the client after mounting
+  }, []);
 
   // Define pages where the header should not be shown or should be minimal
   const noHeaderPages = ['/login', '/register'];
   const minimalHeaderPages = ['/']; // Add any pages needing only the title
 
-  if (noHeaderPages.includes(pathname) || (authLoading && !user && !minimalHeaderPages.includes(pathname))) {
-    // Don't render header on specified pages or while loading and not logged in (except for minimal pages)
-    return null;
-  }
+  // Determine visibility based on client-side state and pathname
+  // Render nothing during SSR or initial client render before useEffect runs
+  // Also hide on specific pages determined by pathname
+  const isHeaderHidden = !isClient || noHeaderPages.includes(pathname);
 
-  const showFullHeader = !minimalHeaderPages.includes(pathname);
-  const showBackButton = ['/settings', '/saved-plans'].includes(pathname);
+  const showFullHeader = isClient && !minimalHeaderPages.includes(pathname) && !noHeaderPages.includes(pathname);
+  const showBackButton = isClient && ['/settings', '/saved-plans'].includes(pathname);
 
   const handleBack = () => {
       router.back(); // Go back to the previous page
   };
+
+  // Render nothing until client-side hydration is complete or if on a no-header page
+  if (!isClient) {
+     // Render a placeholder skeleton that matches the structure but avoids client-specific logic
+     // This helps prevent the hydration mismatch.
+     return (
+         <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6 shadow-sm">
+            {/* Placeholder content */}
+            <div className="flex items-center gap-4">
+                {/* Simulate potential back button space */}
+                <div className="w-10 h-10"></div>
+                <div className="flex items-center gap-2">
+                    <BookOpenCheck className="h-7 w-7 text-primary" />
+                    <h1 className="text-xl font-semibold text-primary">redocêncIA</h1>
+                </div>
+            </div>
+             <div className="flex items-center gap-4">
+                 <Skeleton className="h-5 w-24 hidden sm:inline" />
+                 <Skeleton className="h-8 w-8 rounded-full" />
+                 <Skeleton className="h-8 w-8 rounded-full" />
+                 <Skeleton className="h-8 w-8 rounded-full" />
+             </div>
+         </header>
+     );
+  }
+
+  if (isHeaderHidden) {
+     return null;
+  }
 
 
   return (
