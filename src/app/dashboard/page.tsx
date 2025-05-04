@@ -42,6 +42,16 @@ const aulaDuracaoNoturnoOptions: string[] = [
     // Add more if needed
 ];
 
+// Define the main section titles from the prompt
+const SECTION_TITLES = [
+    "Introdução:",
+    "Desenvolvimento:",
+    "Conclusão:",
+    "Recursos Utilizados:",
+    "Metodologias Sugeridas:",
+    "Sugestões de adaptações para alunos Alvos da Educação Especial:"
+];
+
 export default function DashboardPage() {
   const { user, logout, isLoading: authLoading } = useAuth();
   const router = useRouter();
@@ -532,6 +542,107 @@ export default function DashboardPage() {
    const generateButtonDisabled = formDisabled || selectedContents.length === 0 || selectedSkills.length === 0 || !aulaDuracao; // Updated condition
    const saveButtonDisabled = formDisabled || !generatedPlan || generatingPlan || readingFile; // Disable save if no plan or while generating/reading
 
+  // Helper function to render the generated plan content
+   const renderGeneratedPlan = (planText: string) => {
+        const lines = planText.split('\n');
+        let currentSection = "";
+        let contentBlocks: React.ReactNode[] = [];
+        let listItems: string[] = [];
+        let isInsideList = false;
+
+        const flushList = () => {
+            if (listItems.length > 0) {
+                contentBlocks.push(
+                    <ul key={`list-${contentBlocks.length}`} className="list-disc pl-6 my-2 space-y-1">
+                        {listItems.map((item, idx) => <li key={idx}>{item}</li>)}
+                    </ul>
+                );
+                listItems = [];
+            }
+            isInsideList = false;
+        };
+
+        lines.forEach((line, index) => {
+            line = line.trim();
+
+            // Check if it's a main section title
+            const isSectionTitle = SECTION_TITLES.some(title => line.startsWith(title));
+             if (isSectionTitle) {
+                flushList(); // End any previous list
+                currentSection = line;
+                contentBlocks.push(
+                    <h3 key={`header-${index}`} className="font-semibold text-lg mt-4 mb-2 pt-2 border-t first:border-t-0 first:pt-0">
+                        {line.replace(':', '')}
+                    </h3>
+                );
+                return;
+            }
+
+            // Check for sub-headers (Bold text ending with ':')
+            if (line.startsWith('**') && line.endsWith('**:')) {
+                flushList();
+                contentBlocks.push(
+                    <p key={`subheader-${index}`} className="font-semibold mt-2 mb-1">
+                        {line.slice(2, -2)}:
+                    </p>
+                );
+                return;
+            }
+
+             // Check for bullet points (* or -)
+            if (line.startsWith('* ') || line.startsWith('- ')) {
+                if (!isInsideList) {
+                    flushList(); // Ensure previous block is rendered if switching to list
+                    isInsideList = true;
+                }
+                listItems.push(line.slice(2));
+                return;
+            }
+
+            // Check for numbered lists (e.g., 1.)
+            if (/^\d+\.\s/.test(line)) {
+                 if (!isInsideList) { // Treat numbered lists like bullet points visually for now
+                    flushList();
+                    isInsideList = true;
+                }
+                 listItems.push(line.replace(/^\d+\.\s/, '')); // Add content without number
+                 return;
+            }
+
+
+            // Check for time estimate
+            if (line.startsWith('(') && line.endsWith(')')) {
+                flushList();
+                contentBlocks.push(
+                    <p key={`time-${index}`} className="text-xs text-muted-foreground italic my-1">
+                        {line}
+                    </p>
+                );
+                return;
+            }
+
+            // Regular paragraph
+            if (line) {
+                flushList();
+                contentBlocks.push(
+                    <p key={`para-${index}`} className="my-1">
+                        {line}
+                    </p>
+                );
+            }
+            // Ignore empty lines for rendering, but they act as separators
+            else {
+                 flushList(); // Render list if we encounter an empty line
+            }
+
+        });
+
+        flushList(); // Flush any remaining list items at the end
+
+        return <div className="prose prose-sm max-w-none dark:prose-invert">{contentBlocks}</div>;
+   };
+
+
   return (
     <div className="flex flex-col bg-secondary flex-1"> {/* Use flex-1 to take remaining height */}
 
@@ -859,47 +970,11 @@ export default function DashboardPage() {
                     <Skeleton className="h-4 w-5/6" />
                     </div>
                 ) : generatedPlan ? (
-                   // Enhanced rendering for markdown-like structure
-                   <div className="prose prose-sm max-w-none dark:prose-invert whitespace-pre-wrap">
-                       {generatedPlan.split('\n').map((line, index) => {
-                            line = line.trim(); // Trim whitespace
+                   <>
+                      {/* Render the formatted lesson plan */}
+                       {renderGeneratedPlan(generatedPlan)}
 
-                            // Section Headers (bold or ##, check for following colon or end of line)
-                             if ((line.startsWith('**') && line.endsWith('**')) || line.startsWith('## ')) {
-                                 const headerText = line.replace(/^\*\*|^\## |\*\*$/g, '');
-                                 // Only treat as H3 if it doesn't end with a colon (sub-headers have colons)
-                                if (!headerText.endsWith(':') && headerText.length > 0) {
-                                    return <h3 key={index} className="font-semibold text-lg my-3 pt-3 border-t first:border-t-0 first:pt-0">{headerText}</h3>;
-                                }
-                             }
-                             // Sub-headers (bold within sections, ending with :)
-                            if (line.startsWith('**') && line.endsWith('**:')) {
-                                return <p key={index} className="font-semibold my-1">{line.slice(2, -2)}:</p>;
-                            }
-                            // Bullet points (* or -)
-                             if (line.startsWith('* ') || line.startsWith('- ')) {
-                                return (
-                                     <li key={index} className="ml-5 list-disc">{line.slice(2)}</li>
-                                );
-                            }
-                             // Numbered lists (e.g., 1.)
-                             if (/^\d+\.\s/.test(line)) {
-                                 return (
-                                     <li key={index} className="ml-5 list-decimal">{line.replace(/^\d+\.\s/, '')}</li>
-                                 );
-                             }
-                             // Estimated time in parentheses
-                             if (line.startsWith('(') && line.endsWith(')')) {
-                                 return <p key={index} className="text-xs text-muted-foreground italic my-1">{line}</p>;
-                             }
-                            // Regular paragraph - only render if line is not empty
-                            if (line) {
-                                return <p key={index} className="my-1">{line}</p>;
-                            }
-                            return null; // Don't render empty lines as paragraphs
-                       })}
-
-                        {/* Display Suggested Content */}
+                       {/* Display Suggested Content */}
                         {suggestingContent ? (
                              <div className="mt-6 space-y-2 border-t pt-4">
                                 <p className="font-semibold text-md">Sugerindo conteúdo adicional...</p>
@@ -920,8 +995,7 @@ export default function DashboardPage() {
                                 <p className="text-sm text-muted-foreground">Nenhuma sugestão de conteúdo adicional encontrada.</p>
                              </div>
                         ) : null }
-
-                    </div>
+                    </>
                 ) : (
                     <p className="text-muted-foreground">
                         {showDataMissingAlert
@@ -937,3 +1011,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
