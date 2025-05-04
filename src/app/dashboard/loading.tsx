@@ -1,3 +1,4 @@
+
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { BookOpenCheck } from "lucide-react";
@@ -27,7 +28,7 @@ export default function DashboardLoading() {
               <Skeleton className="h-4 w-64" />
             </CardHeader>
             <CardContent className="space-y-4">
-              {[...Array(7)].map((_, i) => ( // Simulate 7 form fields
+              {[...Array(8)].map((_, i) => ( // Increased to 8 to include Bimestre
                 <div key={i} className="space-y-2">
                   <Skeleton className="h-4 w-1/4" />
                   <Skeleton className="h-10 w-full" />

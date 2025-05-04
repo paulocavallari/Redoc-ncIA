@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -11,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'; // Import RadioGroup
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Settings, LogOut, BookOpenCheck, GraduationCap, BookCopy, Target, ListChecks, MessageSquare, Bot, Clock } from 'lucide-react';
+import { Settings, LogOut, BookOpenCheck, GraduationCap, BookCopy, Target, ListChecks, MessageSquare, Bot, Clock, CalendarDays } from 'lucide-react';
 // Removed getEscopoSequenciaData as we now load from storage or rely on upload
 import { getEscopoDataFromStorage, type EscopoSequenciaItem } from '@/services/escopo-sequencia';
 import { generateLessonPlan, type GenerateLessonPlanInput } from '@/ai/flows/generate-lesson-plan';
@@ -32,14 +33,33 @@ const educationLevelMap: Record<string, string> = {
     '7º ano': 'Ensino Fundamental: Anos Finais',
     '8º ano': 'Ensino Fundamental: Anos Finais',
     '9º ano': 'Ensino Fundamental: Anos Finais',
-    '1ª série': 'Ensino Médio', // Assuming '1ª série' maps to Ensino Médio
+    '1ª série': 'Ensino Médio',
     '2ª série': 'Ensino Médio',
     '3ª série': 'Ensino Médio',
-    // Add mappings for 'Ensino Médio Noturno' if applicable in your data
+    // Add specific mapping for Noturno if the file uses a distinct string like "1ª série - Noturno"
+    // Example: '1ª série - Noturno': 'Ensino Médio Noturno',
 };
 
 const getEducationLevel = (anoSerie: string): string => {
-    return educationLevelMap[anoSerie] || 'Desconhecido'; // Default if not found
+    // Check for explicit "Noturno" level first if it exists in the map keys
+    if (educationLevelMap[anoSerie]) {
+        return educationLevelMap[anoSerie];
+    }
+    // Fallback: Check if the string contains "Noturno" and maps to Ensino Médio
+    if (anoSerie.toLowerCase().includes('noturno') && (anoSerie.includes('1ª') || anoSerie.includes('2ª') || anoSerie.includes('3ª'))) {
+       return 'Ensino Médio Noturno';
+    }
+    // General mapping for Ensino Médio based on series number
+    if (anoSerie.includes('1ª série') || anoSerie.includes('2ª série') || anoSerie.includes('3ª série')) {
+        return 'Ensino Médio';
+    }
+    // Check standard mappings
+    for (const key in educationLevelMap) {
+        if (anoSerie.startsWith(key.split(' ')[0])) { // Match based on year/series number primarily
+            return educationLevelMap[key];
+        }
+    }
+    return 'Desconhecido'; // Default if not found
 };
 
 
@@ -47,6 +67,9 @@ const aulaDuracaoOptions: string[] = [
     '1 aula (45/50 min)',
     '2 aulas (90/100 min)',
     '3 aulas (135/150 min)',
+    // Add specific Noturno options if they differ, e.g.:
+    // '1 aula Noturno (40 min)',
+    // '2 aulas Noturno (80 min)',
 ];
 
 export default function DashboardPage() {
@@ -60,6 +83,7 @@ export default function DashboardPage() {
   // Form State
   const [yearSeries, setYearSeries] = useState('');
   const [subject, setSubject] = useState(''); // 'disciplina' in Portuguese
+  const [bimestre, setBimestre] = useState(''); // New state for Bimester
   const [content, setContent] = useState(''); // 'conteudo' in Portuguese - Now derived from knowledge object
   const [knowledgeObject, setKnowledgeObject] = useState(''); // New state for 'objetosDoConhecimento'
   const [selectedSkill, setSelectedSkill] = useState<string>('');
@@ -110,13 +134,13 @@ export default function DashboardPage() {
   // Available Years/Series (unique values from the loaded data)
    const availableYears = useMemo(() => {
      if (!escopoData.length) return [];
-     // Sort based on typical school order (needs refinement for mixed 'ano'/'série')
+     // Sort based on typical school order
      const sortedYears = [...new Set(escopoData.map(item => item.anoSerie))]
          .sort((a, b) => {
              const numA = parseInt(a.match(/\d+/)?.[0] || '0');
              const numB = parseInt(b.match(/\d+/)?.[0] || '0');
-             const typeA = a.includes('série') ? 1 : 0;
-             const typeB = b.includes('série') ? 1 : 0;
+             const typeA = a.includes('série') ? 1 : (a.includes('ano') ? 0 : 2); // 0 for ano, 1 for série, 2 otherwise
+             const typeB = b.includes('série') ? 1 : (b.includes('ano') ? 0 : 2);
 
              if (typeA !== typeB) return typeA - typeB; // Group 'ano' then 'série'
              return numA - numB;
@@ -130,19 +154,38 @@ export default function DashboardPage() {
      return [...new Set(escopoData.filter(item => item.anoSerie === yearSeries).map(item => item.disciplina))].sort();
    }, [yearSeries, escopoData]);
 
-    // Available Knowledge Objects for the selected Year/Series and Subject
-   const availableKnowledgeObjects = useMemo(() => {
+    // Available Bimestres for the selected Year/Series and Subject
+   const availableBimestres = useMemo(() => {
      if (!subject || !yearSeries || !escopoData.length) return [];
-     return [...new Set(escopoData.filter(item => item.anoSerie === yearSeries && item.disciplina === subject).map(item => item.objetosDoConhecimento))].sort();
+     const bimestres = [...new Set(escopoData
+       .filter(item => item.anoSerie === yearSeries && item.disciplina === subject)
+       .map(item => item.bimestre)
+       )].sort((a, b) => {
+         // Sort bimestres numerically (1º, 2º, 3º, 4º)
+         const numA = parseInt(a.match(/\d+/)?.[0] || '0');
+         const numB = parseInt(b.match(/\d+/)?.[0] || '0');
+         return numA - numB;
+       });
+     return bimestres;
    }, [subject, yearSeries, escopoData]);
 
-  // Available Skills based on Year, Subject, and Knowledge Object
+    // Available Knowledge Objects for the selected Year/Series, Subject, and Bimester
+   const availableKnowledgeObjects = useMemo(() => {
+     if (!bimestre || !subject || !yearSeries || !escopoData.length) return [];
+     return [...new Set(escopoData
+        .filter(item => item.anoSerie === yearSeries && item.disciplina === subject && item.bimestre === bimestre)
+        .map(item => item.objetosDoConhecimento))]
+        .sort();
+   }, [bimestre, subject, yearSeries, escopoData]);
+
+  // Available Skills based on Year, Subject, Bimester, and Knowledge Object
   const availableSkills = useMemo(() => {
-      if (!knowledgeObject || !subject || !yearSeries || !escopoData.length) return [];
+      if (!knowledgeObject || !bimestre || !subject || !yearSeries || !escopoData.length) return [];
       // Find items matching the current selection
       const matchingItems = escopoData.filter(item =>
           item.anoSerie === yearSeries &&
           item.disciplina === subject &&
+          item.bimestre === bimestre && // Filter by bimestre
           item.objetosDoConhecimento === knowledgeObject
       );
       // Extract unique skills from matching items
@@ -151,35 +194,41 @@ export default function DashboardPage() {
            // Handle potential variations in how skills are stored (string vs array)
            if (typeof item.habilidade === 'string') {
               skillsSet.add(item.habilidade.trim());
-           } else if (Array.isArray(item.habilidades)) { // Check for the original 'habilidades' array if needed
-              item.habilidades.forEach(skill => skillsSet.add(skill.trim()));
            }
+           // If 'habilidades' array exists and is used, handle it here:
+           // else if (Array.isArray(item.habilidades)) {
+           //    item.habilidades.forEach(skill => skillsSet.add(skill.trim()));
+           // }
       });
       return Array.from(skillsSet).sort();
-  }, [knowledgeObject, subject, yearSeries, escopoData]);
+  }, [knowledgeObject, bimestre, subject, yearSeries, escopoData]);
 
-   // Derive Content based on the selected Knowledge Object (find the first matching content)
+
+   // Derive Content based on the selected Skill (find the first matching content)
     useEffect(() => {
-        if (!knowledgeObject || !subject || !yearSeries || !escopoData.length) {
+        if (!selectedSkill || !knowledgeObject || !bimestre || !subject || !yearSeries || !escopoData.length) {
             setContent('');
             return;
         }
         const matchingItem = escopoData.find(item =>
             item.anoSerie === yearSeries &&
             item.disciplina === subject &&
-            item.objetosDoConhecimento === knowledgeObject
+            item.bimestre === bimestre &&
+            item.objetosDoConhecimento === knowledgeObject &&
+            item.habilidade === selectedSkill // Match based on selected skill now
         );
-        setContent(matchingItem?.conteudo || ''); // Set content from the first match, or empty if none
-    }, [knowledgeObject, subject, yearSeries, escopoData]);
+        setContent(matchingItem?.conteudo || ''); // Set content from the match, or empty if none
+    }, [selectedSkill, knowledgeObject, bimestre, subject, yearSeries, escopoData]);
 
 
   // --- Reset dependent fields when a higher-level field changes ---
   const handleYearChange = (value: string) => {
     setYearSeries(value);
     setSubject('');
+    setBimestre('');
     setKnowledgeObject('');
     setSelectedSkill('');
-    setContent(''); // Content is now derived
+    setContent('');
     setAulaDuracao('');
     setGeneratedPlan('');
     setSuggestedContent([]);
@@ -187,18 +236,30 @@ export default function DashboardPage() {
 
   const handleSubjectChange = (value: string) => {
     setSubject(value);
+    setBimestre('');
     setKnowledgeObject('');
     setSelectedSkill('');
-     setContent(''); // Content is now derived
+    setContent('');
     setAulaDuracao('');
     setGeneratedPlan('');
     setSuggestedContent([]);
   };
 
+  const handleBimestreChange = (value: string) => {
+      setBimestre(value);
+      setKnowledgeObject('');
+      setSelectedSkill('');
+      setContent('');
+      setAulaDuracao('');
+      setGeneratedPlan('');
+      setSuggestedContent([]);
+  };
+
    const handleKnowledgeObjectChange = (value: string) => {
      setKnowledgeObject(value);
      setSelectedSkill(''); // Reset skills when knowledge object changes
-     // Content will be updated by the useEffect hook
+     setContent(''); // Reset content, will be updated by useEffect based on skill
+     setAulaDuracao('');
      setGeneratedPlan('');
      setSuggestedContent([]);
    };
@@ -206,6 +267,8 @@ export default function DashboardPage() {
 
   const handleSkillChange = (skill: string) => {
     setSelectedSkill(skill);
+     // Content will be updated by the useEffect hook based on the selected skill
+    setAulaDuracao('');
     setGeneratedPlan('');
     setSuggestedContent([]);
   };
@@ -216,27 +279,28 @@ export default function DashboardPage() {
       setSuggestedContent([]);
   };
 
+  // Determine if the current selection is for 'Ensino Médio Noturno'
+  const isEnsinoMedioNoturno = useMemo(() => {
+      return getEducationLevel(yearSeries) === 'Ensino Médio Noturno';
+  }, [yearSeries]);
+
+  // Filter aulaDuracaoOptions based on whether it's Ensino Médio Noturno
+  const filteredAulaDuracaoOptions = useMemo(() => {
+      // In a real scenario, you might have specific options for Noturno, e.g.:
+      // if (isEnsinoMedioNoturno) {
+      //     return ['1 aula Noturno (40 min)', '2 aulas Noturno (80 min)'];
+      // }
+      // For now, just return the standard options, but the logic is here
+      return aulaDuracaoOptions;
+  }, [isEnsinoMedioNoturno]);
+
 
   const handleGeneratePlan = async () => {
-    if (!subject || !yearSeries || !selectedSkill || !knowledgeObject || !aulaDuracao) { // Check knowledgeObject instead of content
-      console.error("Por favor, preencha todos os campos obrigatórios (Ano/Série, Disciplina, Objeto de Conhecimento, Habilidade, Duração).");
+    if (!subject || !yearSeries || !bimestre || !knowledgeObject || !selectedSkill || !aulaDuracao || !content) {
+      console.error("Por favor, preencha todos os campos obrigatórios (Ano/Série, Disciplina, Bimestre, Objeto de Conhecimento, Habilidade, Duração). Content: ", content);
       // TODO: Show toast message
       return;
     }
-
-     // Re-derive content just before generating, in case state update was pending
-     const derivedContent = escopoData.find(item =>
-            item.anoSerie === yearSeries &&
-            item.disciplina === subject &&
-            item.objetosDoConhecimento === knowledgeObject
-        )?.conteudo || '';
-
-      if (!derivedContent) {
-          console.error("Não foi possível encontrar o conteúdo correspondente para o objeto de conhecimento selecionado.");
-          // TODO: Show toast
-          return;
-      }
-
 
     setGeneratingPlan(true);
     setGeneratedPlan('');
@@ -247,7 +311,7 @@ export default function DashboardPage() {
       disciplina: subject,
       anoSerie: yearSeries,
       habilidade: selectedSkill,
-      conteudo: derivedContent, // Use the derived content
+      conteudo: content, // Use the derived content based on skill
       aulaDuracao: aulaDuracao,
       orientacoesAdicionais: additionalInstructions || undefined,
     };
@@ -257,7 +321,7 @@ export default function DashboardPage() {
       setGeneratedPlan(response.lessonPlan);
 
       // Suggest additional content based on the derived content
-      handleSuggestContent(derivedContent, input.anoSerie, input.disciplina, response.lessonPlan);
+      handleSuggestContent(input.conteudo, input.anoSerie, input.disciplina, response.lessonPlan);
 
     } catch (error) {
       console.error("Error generating lesson plan:", error);
@@ -406,6 +470,27 @@ export default function DashboardPage() {
               </Select>
             </div>
 
+             {/* Bimester (Bimestre) */}
+            <div className="space-y-2">
+              <Label htmlFor="bimestre" className="flex items-center gap-1">
+                 <CalendarDays className="h-4 w-4" /> Bimestre *
+              </Label>
+              <Select
+                value={bimestre}
+                onValueChange={handleBimestreChange}
+                disabled={!subject || loadingData || generatingPlan || escopoData.length === 0}
+              >
+                <SelectTrigger id="bimestre">
+                  <SelectValue placeholder={!subject ? "Selecione a disciplina primeiro" : "Selecione o bimestre"} />
+                </SelectTrigger>
+                <SelectContent>
+                   {availableBimestres.map(bim => (
+                     <SelectItem key={bim} value={bim}>{bim}</SelectItem>
+                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Knowledge Object (Objetos do Conhecimento) */}
             <div className="space-y-2">
               <Label htmlFor="knowledgeObject" className="flex items-center gap-1">
@@ -414,10 +499,10 @@ export default function DashboardPage() {
               <Select
                 value={knowledgeObject}
                 onValueChange={handleKnowledgeObjectChange}
-                disabled={!subject || loadingData || generatingPlan || escopoData.length === 0}
+                disabled={!bimestre || loadingData || generatingPlan || escopoData.length === 0} // Depends on bimestre now
               >
                 <SelectTrigger id="knowledgeObject">
-                  <SelectValue placeholder={!subject ? "Selecione a disciplina primeiro" : "Selecione o objeto de conhecimento"} />
+                  <SelectValue placeholder={!bimestre ? "Selecione o bimestre primeiro" : "Selecione o objeto de conhecimento"} />
                 </SelectTrigger>
                 <SelectContent>
                    <ScrollArea className="h-[200px]"> {/* Scroll for long lists */}
@@ -429,15 +514,6 @@ export default function DashboardPage() {
               </Select>
             </div>
 
-             {/* Derived Content Display (Read-only) */}
-             {content && (
-                 <div className="space-y-1 rounded-md border border-input bg-secondary p-3 text-sm text-secondary-foreground">
-                     <Label className="text-xs font-medium text-muted-foreground">Conteúdo Derivado:</Label>
-                     <p>{content}</p>
-                 </div>
-             )}
-
-
              {/* Skills (Habilidade) - RadioGroup */}
              {availableSkills.length > 0 && (
                <div className="space-y-2">
@@ -447,7 +523,7 @@ export default function DashboardPage() {
                      <RadioGroup
                         value={selectedSkill}
                         onValueChange={handleSkillChange}
-                        disabled={generatingPlan || escopoData.length === 0}
+                        disabled={generatingPlan || escopoData.length === 0 || !knowledgeObject} // Depends on knowledge object
                         className="space-y-2"
                      >
                        {availableSkills.map(skill => (
@@ -464,6 +540,15 @@ export default function DashboardPage() {
                </div>
              )}
 
+             {/* Derived Content Display (Read-only) */}
+             {content && (
+                 <div className="space-y-1 rounded-md border border-input bg-secondary p-3 text-sm text-secondary-foreground">
+                     <Label className="text-xs font-medium text-muted-foreground">Conteúdo Derivado:</Label>
+                     <p>{content}</p>
+                 </div>
+             )}
+
+
             {/* Lesson Duration (Duração da Aula) */}
              <div className="space-y-2">
                <Label htmlFor="aulaDuracao" className="flex items-center gap-1">
@@ -472,18 +557,21 @@ export default function DashboardPage() {
                <Select
                  value={aulaDuracao}
                  onValueChange={handleDurationChange}
-                 // Enable when a skill is selected
-                 disabled={!selectedSkill || loadingData || generatingPlan || escopoData.length === 0}
+                 // Enable when a skill is selected and content is derived
+                 disabled={!selectedSkill || !content || loadingData || generatingPlan || escopoData.length === 0}
                >
                  <SelectTrigger id="aulaDuracao">
-                   <SelectValue placeholder={!selectedSkill ? "Selecione uma habilidade primeiro" : "Selecione a duração"} />
+                   <SelectValue placeholder={!selectedSkill || !content ? "Selecione uma habilidade primeiro" : "Selecione a duração"} />
                  </SelectTrigger>
                  <SelectContent>
-                   {aulaDuracaoOptions.map(dur => (
+                   {/* Render only filtered options */}
+                   {filteredAulaDuracaoOptions.map(dur => (
                      <SelectItem key={dur} value={dur}>{dur}</SelectItem>
                    ))}
                  </SelectContent>
                </Select>
+                {/* Optional: Add a note about Noturno duration */}
+                {/* {isEnsinoMedioNoturno && <p className="text-xs text-muted-foreground mt-1">Durações específicas para Ensino Médio Noturno.</p>} */}
              </div>
 
 
@@ -505,7 +593,7 @@ export default function DashboardPage() {
             {/* Generate Button */}
             <Button
               onClick={handleGeneratePlan}
-              disabled={!knowledgeObject || !selectedSkill || !aulaDuracao || loadingData || generatingPlan || escopoData.length === 0} // Updated condition
+              disabled={!selectedSkill || !aulaDuracao || !content || loadingData || generatingPlan || escopoData.length === 0} // Check all required fields including content
               className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
             >
               {generatingPlan ? 'Gerando...' : 'Gerar Plano de Aula'}
@@ -538,33 +626,50 @@ export default function DashboardPage() {
                        {generatedPlan.split('\n').map((line, index) => {
                             line = line.trim(); // Trim whitespace
 
-                            // Section Headers (bold or ##)
-                            if ((line.startsWith('**') && line.endsWith('**') || line.startsWith('## ')) && !line.includes(':')) {
-                                const headerText = line.replace(/^\*\*|^\## |\*\*$/g, '');
-                                return <h3 key={index} className="font-semibold text-lg my-3 pt-3 border-t first:border-t-0 first:pt-0">{headerText}</h3>;
-                            }
+                            // Section Headers (bold or ##, check for following colon or end of line)
+                             if ((line.startsWith('**') && line.endsWith('**')) || line.startsWith('## ')) {
+                                 const headerText = line.replace(/^\*\*|^\## |\*\*$/g, '');
+                                 // Only treat as H3 if it doesn't end with a colon (sub-headers have colons)
+                                if (!headerText.endsWith(':') && headerText.length > 0) {
+                                    return <h3 key={index} className="font-semibold text-lg my-3 pt-3 border-t first:border-t-0 first:pt-0">{headerText}</h3>;
+                                }
+                             }
                              // Sub-headers (bold within sections, ending with :)
                             if (line.startsWith('**') && line.endsWith('**:')) {
                                 return <p key={index} className="font-semibold my-1">{line.slice(2, -2)}:</p>;
                             }
-                             // Sub-headers (bold within sections, no colon) - less common now
-                            // if (line.startsWith('*') && line.endsWith('*') && !line.startsWith('**')) {
-                            //     return <p key={index} className="font-semibold my-1">{line.slice(1, -1)}</p>;
-                            // }
                             // Bullet points (* or -)
                              if (line.startsWith('* ') || line.startsWith('- ')) {
-                                return <li key={index} className="ml-5 list-disc">{line.slice(2)}</li>;
+                                // Check if it's inside a list already, rudimentary check
+                                const prevLine = index > 0 ? generatedPlan.split('\n')[index - 1].trim() : '';
+                                const isListItem = prevLine.startsWith('* ') || prevLine.startsWith('- ');
+                                const Tag = isListItem ? React.Fragment : 'ul'; // Wrap first item in ul
+                                return (
+                                    //<Tag key={index}> {/* Simple wrap, might nest incorrectly */}
+                                        <li key={index} className="ml-5 list-disc">{line.slice(2)}</li>
+                                    //</Tag>
+                                );
                             }
                              // Numbered lists (e.g., 1.)
                              if (/^\d+\.\s/.test(line)) {
-                                return <li key={index} className="ml-5 list-decimal">{line.replace(/^\d+\.\s/, '')}</li>;
+                                 const prevLine = index > 0 ? generatedPlan.split('\n')[index - 1].trim() : '';
+                                 const isListItem = /^\d+\.\s/.test(prevLine);
+                                 const Tag = isListItem ? React.Fragment : 'ol';
+                                 return (
+                                    //<Tag key={index}> {/* Simple wrap */}
+                                        <li key={index} className="ml-5 list-decimal">{line.replace(/^\d+\.\s/, '')}</li>
+                                    //</Tag>
+                                 );
                              }
                              // Estimated time in parentheses
                              if (line.startsWith('(') && line.endsWith(')')) {
                                  return <p key={index} className="text-xs text-muted-foreground italic my-1">{line}</p>;
                              }
-                            // Regular paragraph
-                            return <p key={index} className="my-1">{line}</p>;
+                            // Regular paragraph - only render if line is not empty
+                            if (line) {
+                                return <p key={index} className="my-1">{line}</p>;
+                            }
+                            return null; // Don't render empty lines as paragraphs
                        })}
 
                         {/* Display Suggested Content */}
@@ -605,3 +710,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
