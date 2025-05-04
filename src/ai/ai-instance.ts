@@ -1,5 +1,4 @@
-'use server';
-
+// Remove 'use server' directive
 import {genkit} from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
 
