@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Settings, LogOut, BookOpenCheck, GraduationCap, BookCopy, Target, ListChecks, MessageSquare, Bot, Clock, CalendarDays, Layers, Paperclip, AlertTriangle, Library, Save, List, RotateCcw, UploadCloud } from 'lucide-react'; // Added RotateCcw, UploadCloud
+import { Settings, LogOut, BookOpenCheck, GraduationCap, BookCopy, Target, ListChecks, MessageSquare, Bot, Clock, CalendarDays, Layers, Paperclip, AlertTriangle, Library, Save, List, RotateCcw, UploadCloud, Pencil } from 'lucide-react'; // Added RotateCcw, UploadCloud, Pencil
 import {
     getAllEscopoDataFromStorage,
     type EscopoSequenciaItem,
@@ -628,3 +628,4 @@ export default function DashboardPage() {
     </Suspense>
   );
 }
+
