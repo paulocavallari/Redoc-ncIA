@@ -315,14 +315,17 @@ function DashboardPageContent() {
                .replace(/<script.*?>.*?<\/script>/gis, '') // Remove script tags
                .replace(/ on\w+="[^"]*"/g, ''); // Remove on* event handlers
 
-           // Configure marked - Use defaults for broader compatibility with editor
-           marked.setOptions({
-               gfm: true, // Enable GitHub Flavored Markdown
-               breaks: true, // Convert single line breaks to <br>
-               // Note: We removed custom renderers here. The 'prose' class in Tiptap handles styling.
-           });
+           // Configure marked to include breaks for newlines
+            marked.setOptions({
+                gfm: true, // Enable GitHub Flavored Markdown
+                breaks: true, // Convert single line breaks to <br>
+                // Note: Removed custom renderer to let RichTextEditor handle styling
+            });
 
-           return marked.parse(sanitizedMarkdown);
+           const html = marked.parse(sanitizedMarkdown);
+           console.log("[markdownToHtml] Converted HTML:", html.substring(0, 500) + "..."); // Log beginning of HTML
+           return html;
+
        } catch (error) {
            console.error("Error converting markdown to HTML:", error);
            return `<p><strong>Erro ao processar o plano recebido.</strong> Por favor, tente gerar novamente.</p><p><small>Detalhe técnico: ${error instanceof Error ? error.message : String(error)}</small></p>`;
@@ -338,7 +341,7 @@ function DashboardPageContent() {
 
     setGeneratingPlan(true);
     setReadingFile(true);
-    setEditablePlanContent(''); // Clear editor
+    setEditablePlanContent(''); // Clear editor before generation
     setIsPlanGeneratedOrLoaded(false);
     setSuggestingContent(false);
     setSuggestedContent([]);
@@ -373,10 +376,15 @@ function DashboardPageContent() {
           throw new Error("A resposta da IA está vazia ou em formato inválido.");
       }
 
+      console.log("[Dashboard] Raw AI response (Markdown):", response.lessonPlan.substring(0, 500) + "...");
       const htmlContent = markdownToHtml(response.lessonPlan);
+      console.log("[Dashboard] Generated HTML content:", htmlContent.substring(0, 500) + "..."); // Log generated HTML
+
+      // Directly set the newly generated HTML content
       setEditablePlanContent(htmlContent);
-      setIsPlanGeneratedOrLoaded(true);
-      console.log("[Dashboard] Lesson plan generated successfully.");
+      setIsPlanGeneratedOrLoaded(true); // Mark plan as generated
+
+      console.log("[Dashboard] Lesson plan generated and set successfully.");
       toast({ title: "Plano Gerado", description: "O plano de aula foi gerado. Edite-o abaixo.", variant: "default" });
 
       // Suggest content after successful generation
@@ -386,8 +394,8 @@ function DashboardPageContent() {
       console.error("[Dashboard] Error generating lesson plan:", error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorHtml = `<p><strong>Erro ao gerar o plano de aula:</strong></p><p>${errorMessage}</p><p><small>Verifique os detalhes no console ou tente novamente.</small></p>`;
-      setEditablePlanContent(errorHtml);
-      setIsPlanGeneratedOrLoaded(true); // Show error in editor
+      setEditablePlanContent(errorHtml); // Set error HTML in the editor
+      setIsPlanGeneratedOrLoaded(true); // Still mark as loaded to show the error
       toast({ title: "Erro na Geração", description: `Falha ao gerar o plano: ${errorMessage}`, variant: "destructive", duration: 10000 });
     } finally {
       setGeneratingPlan(false);
@@ -413,7 +421,7 @@ function DashboardPageContent() {
           return;
       }
 
-      if (editablePlanContent.includes("Erro ao gerar o plano de aula:")) {
+      if (editablePlanContent.includes("Erro ao gerar o plano de aula:") || editablePlanContent.includes("Erro ao processar o plano recebido")) {
           toast({ title: "Erro no Plano", description: "Não é possível salvar um plano que resultou em erro. Por favor, gere ou carregue um plano válido primeiro.", variant: "destructive" });
           return;
       }
@@ -541,7 +549,7 @@ function DashboardPageContent() {
                     </div>
                 ) : isPlanGeneratedOrLoaded ? (
                    <>
-                       {/* Editor Component */}
+                       {/* Editor Component - Pass editablePlanContent and onChange handler */}
                        <RichTextEditor content={editablePlanContent} onChange={handleEditorChange} />
 
                        {/* Display Suggested Content below the editor */}
@@ -562,7 +570,7 @@ function DashboardPageContent() {
                                     </ul>
                                 </ScrollArea>
                             </div>
-                        ) : !generatingPlan && !readingFile && !suggestingContent && !editablePlanContent.includes("Erro ao gerar") ? (
+                        ) : !generatingPlan && !readingFile && !suggestingContent && !editablePlanContent.includes("Erro ao gerar") && !editablePlanContent.includes("Erro ao processar") ? (
                              <div className="mt-4 border-t pt-3 px-4 pb-2">
                                 <p className="text-sm text-muted-foreground">Nenhuma sugestão de conteúdo adicional encontrada ou aplicável.</p>
                              </div>
@@ -591,8 +599,16 @@ function DashboardLoadingSkeleton() {
     return (
       <div className="flex min-h-screen flex-col bg-secondary">
          <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6 shadow-sm">
-             <div className="flex items-center gap-4"> <div className="w-10 h-10"></div> <div className="flex items-center gap-2"> <BookOpenCheck className="h-7 w-7 text-primary" /> <h1 className="text-xl font-semibold text-primary">redocêncIA</h1> </div> </div>
-             <div className="flex items-center gap-4"> <Skeleton className="h-5 w-24 hidden sm:inline" /> <Skeleton className="h-8 w-8 rounded-full" /> <Skeleton className="h-8 w-8 rounded-full" /> <Skeleton className="h-8 w-8 rounded-full" /> </div>
+             <div className="flex items-center gap-4">
+                <Skeleton className="h-8 w-8" /> {/* Placeholder for potential back button */}
+                 <Skeleton className="h-10 w-28" /> {/* Placeholder for Logo */}
+             </div>
+             <div className="flex items-center gap-4">
+                <Skeleton className="h-5 w-24 hidden sm:inline" />
+                <Skeleton className="h-8 w-8 rounded-full" /> {/* Saved Plans Icon */}
+                <Skeleton className="h-8 w-8 rounded-full" /> {/* Settings Icon */}
+                <Skeleton className="h-8 w-8 rounded-full" /> {/* Logout Icon */}
+             </div>
          </header>
          <main className="flex-1 p-4 md:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
            <Card className="shadow-md"> <CardHeader> <Skeleton className="h-7 w-48 mb-1" /> <Skeleton className="h-4 w-64" /> </CardHeader> <CardContent className="space-y-4"> {[...Array(9)].map((_, i) => ( <div key={i} className="space-y-2"> <Skeleton className="h-4 w-1/4" /> <Skeleton className={`h-${i === 5 ? 12 : i === 7 ? 20 : 10} w-full`} /> </div> ))} <Skeleton className="h-10 w-full mt-4" /> </CardContent> </Card>
@@ -610,4 +626,3 @@ export default function DashboardPage() {
     </Suspense>
   );
 }
-
