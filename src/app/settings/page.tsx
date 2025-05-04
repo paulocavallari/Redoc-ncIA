@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Upload, KeyRound, ArrowLeft, BookOpenCheck, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { processEscopoFile, saveEscopoDataToStorage, EscopoSequenciaItem } from '@/services/escopo-sequencia';
 
 
 // Local storage key can still be used for display/reference, but the hardcoded key is used by Genkit
@@ -22,7 +23,6 @@ export default function SettingsPage() {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-  // State now primarily for display or potential future overrides
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -47,13 +47,13 @@ export default function SettingsPage() {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
       const file = event.target.files[0];
-      // Basic validation (optional: check file type, size)
-      if (file.name.endsWith('.csv') || file.name.endsWith('.xlsx')) {
+      // Allow only .xlsx files
+      if (file.name.endsWith('.xlsx')) {
          setSelectedFile(file);
       } else {
           toast({
               title: "Arquivo Inválido",
-              description: "Por favor, selecione um arquivo .csv ou .xlsx.",
+              description: "Por favor, selecione um arquivo .xlsx.",
               variant: "destructive",
           });
           event.target.value = ''; // Clear the input
@@ -69,37 +69,56 @@ export default function SettingsPage() {
     if (!selectedFile) {
       toast({
         title: "Nenhum Arquivo Selecionado",
-        description: "Por favor, selecione um arquivo para upload.",
+        description: "Por favor, selecione um arquivo .xlsx para upload.",
         variant: "destructive",
       });
       return;
     }
 
     setIsUploading(true);
-    // Simulate upload process
-    console.log("Simulating upload of:", selectedFile.name);
-    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate delay
+    try {
+        const fileData = await selectedFile.arrayBuffer();
+        console.log(`Processing file: ${selectedFile.name}, size: ${fileData.byteLength} bytes`);
+        const processedData: EscopoSequenciaItem[] = processEscopoFile(fileData);
 
-    // In a real app, you would process the file here (e.g., send to backend, parse data)
-    // For now, just show a success message
+        if (processedData.length > 0) {
+            saveEscopoDataToStorage(processedData);
+            toast({
+                title: "Upload Concluído",
+                description: `Arquivo "${selectedFile.name}" processado com sucesso. ${processedData.length} itens carregados.`,
+            });
+             // Dispatch event to notify dashboard to reload data
+             window.dispatchEvent(new CustomEvent('escopoDataUpdated'));
 
-    setIsUploading(false);
-    setSelectedFile(null); // Clear selection after simulated upload
-    // Clear the file input visually
-    const fileInput = document.getElementById('escopoFile') as HTMLInputElement;
-    if (fileInput) fileInput.value = '';
+        } else {
+             toast({
+                title: "Processamento Concluído",
+                description: `Nenhum dado válido encontrado no arquivo "${selectedFile.name}" ou as colunas esperadas estão ausentes/incorretas. Verifique o console para mais detalhes.`,
+                variant: "destructive", // Use destructive for warnings/errors during processing
+                duration: 10000, // Longer duration for error messages
+            });
+        }
 
-    toast({
-      title: "Upload Simulado",
-      description: `Arquivo "${selectedFile.name}" recebido e dados "atualizados" (simulação).`,
-    });
-     // Potentially trigger a data refresh in the dashboard if needed
+        setSelectedFile(null); // Clear selection after processing
+        // Clear the file input visually
+        const fileInput = document.getElementById('escopoFile') as HTMLInputElement;
+        if (fileInput) fileInput.value = '';
+
+
+    } catch (error) {
+        console.error("Error processing XLSX file:", error);
+        toast({
+          title: "Erro no Upload",
+          description: `Falha ao processar o arquivo "${selectedFile.name}". Verifique se o formato está correto. Detalhes: ${error instanceof Error ? error.message : String(error)}`,
+          variant: "destructive",
+          duration: 10000, // Longer duration for error messages
+        });
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleSaveApiKey = async () => {
-     // Saving to localStorage is now less critical as the key is hardcoded
-     // This function might be kept for future flexibility or removed.
-     // For now, it just updates the localStorage value.
      if (!apiKeyInput.trim()) {
         toast({
            title: "Chave API Inválida",
@@ -118,7 +137,7 @@ export default function SettingsPage() {
     setIsSavingKey(false);
     toast({
       title: "Chave API Atualizada (Localmente)",
-       description: "A chave no campo foi salva localmente para referência.", // Updated text
+       description: "A chave no campo foi salva localmente para referência.",
     });
   };
 
@@ -159,16 +178,18 @@ export default function SettingsPage() {
                 Upload do Escopo-Sequência
               </CardTitle>
               <CardDescription>
-                Faça o upload do arquivo (.csv ou .xlsx) contendo os dados de disciplinas, anos, conteúdos e habilidades (funcionalidade simulada).
+                Faça o upload do arquivo <strong>.xlsx</strong> contendo os dados de disciplinas, anos, bimestres, habilidades, objetos de conhecimento e conteúdos.
+                O nome da planilha (worksheet) será usado como o nome da Disciplina.
+                 As colunas esperadas são: <strong>Ano/Série</strong>, <strong>Bimestre</strong>, <strong>Habilidade</strong>, <strong>Objetos do Conhecimento</strong> (ou variação), e <strong>Conteúdo</strong>.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="escopoFile">Selecionar Arquivo</Label>
+                <Label htmlFor="escopoFile">Selecionar Arquivo (.xlsx)</Label>
                 <Input
                   id="escopoFile"
                   type="file"
-                  accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" // Accept CSV and Excel types
+                  accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" // Accept only .xlsx
                   onChange={handleFileChange}
                   disabled={isUploading}
                    className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
@@ -180,7 +201,7 @@ export default function SettingsPage() {
                 disabled={!selectedFile || isUploading}
                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
               >
-                {isUploading ? 'Enviando...' : 'Fazer Upload (Simulado)'}
+                {isUploading ? 'Processando...' : 'Fazer Upload e Processar'}
               </Button>
             </CardContent>
           </Card>
@@ -194,9 +215,8 @@ export default function SettingsPage() {
               </CardTitle>
                <Alert variant="destructive" className="mt-2">
                   <AlertTriangle className="h-4 w-4" />
-                  {/* <AlertTitle>Atenção</AlertTitle> */}
                   <AlertDescription>
-                     A chave de API está atualmente codificada diretamente em <code>src/ai/ai-instance.ts</code>. O campo abaixo é apenas para referência ou futuras modificações. A chave ativa é: <strong>{HARDCODED_API_KEY_DISPLAY}</strong>.
+                     A chave de API está atualmente codificada diretamente em <code>src/ai/ai-instance.ts</code>. O campo abaixo é apenas para referência. A chave ativa é: <strong>{HARDCODED_API_KEY_DISPLAY}</strong>.
                   </AlertDescription>
                 </Alert>
               <CardDescription className="pt-2">

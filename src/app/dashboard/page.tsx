@@ -12,24 +12,36 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'; // Imp
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Settings, LogOut, BookOpenCheck, GraduationCap, BookCopy, Target, ListChecks, MessageSquare, Bot, Clock } from 'lucide-react';
-import { getEscopoSequenciaData, type EscopoSequenciaItem } from '@/services/escopo-sequencia';
+// Removed getEscopoSequenciaData as we now load from storage or rely on upload
+import { getEscopoDataFromStorage, type EscopoSequenciaItem } from '@/services/escopo-sequencia';
 import { generateLessonPlan, type GenerateLessonPlanInput } from '@/ai/flows/generate-lesson-plan';
 import { suggestAdditionalContent, type SuggestAdditionalContentInput } from '@/ai/flows/suggest-additional-content';
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertTriangle } from 'lucide-react';
 
 
-type EducationLevel =
-  | 'Ensino Fundamental: Anos Iniciais'
-  | 'Ensino Fundamental: Anos Finais'
-  | 'Ensino Médio'
-  | 'Ensino Médio Noturno';
+// Education Level mapping (adjust if needed based on 'anoSerie' values in your XLSX)
+const educationLevelMap: Record<string, string> = {
+    '1º ano': 'Ensino Fundamental: Anos Iniciais',
+    '2º ano': 'Ensino Fundamental: Anos Iniciais',
+    '3º ano': 'Ensino Fundamental: Anos Iniciais',
+    '4º ano': 'Ensino Fundamental: Anos Iniciais',
+    '5º ano': 'Ensino Fundamental: Anos Iniciais',
+    '6º ano': 'Ensino Fundamental: Anos Finais',
+    '7º ano': 'Ensino Fundamental: Anos Finais',
+    '8º ano': 'Ensino Fundamental: Anos Finais',
+    '9º ano': 'Ensino Fundamental: Anos Finais',
+    '1ª série': 'Ensino Médio', // Assuming '1ª série' maps to Ensino Médio
+    '2ª série': 'Ensino Médio',
+    '3ª série': 'Ensino Médio',
+    // Add mappings for 'Ensino Médio Noturno' if applicable in your data
+};
 
-const educationLevels: EducationLevel[] = [
-  'Ensino Fundamental: Anos Iniciais',
-  'Ensino Fundamental: Anos Finais',
-  'Ensino Médio',
-  'Ensino Médio Noturno',
-];
+const getEducationLevel = (anoSerie: string): string => {
+    return educationLevelMap[anoSerie] || 'Desconhecido'; // Default if not found
+};
+
 
 const aulaDuracaoOptions: string[] = [
     '1 aula (45/50 min)',
@@ -43,15 +55,16 @@ export default function DashboardPage() {
 
   const [escopoData, setEscopoData] = useState<EscopoSequenciaItem[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [showDataMissingAlert, setShowDataMissingAlert] = useState(false);
 
   // Form State
-  const [educationLevel, setEducationLevel] = useState<EducationLevel | ''>('');
   const [yearSeries, setYearSeries] = useState('');
   const [subject, setSubject] = useState(''); // 'disciplina' in Portuguese
-  const [content, setContent] = useState(''); // 'conteudo' in Portuguese
-  const [selectedSkill, setSelectedSkill] = useState<string>(''); // Changed from array to single string
-  const [aulaDuracao, setAulaDuracao] = useState<string>(''); // New state for duration
-  const [additionalInstructions, setAdditionalInstructions] = useState(''); // 'orientacoesAdicionais'
+  const [content, setContent] = useState(''); // 'conteudo' in Portuguese - Now derived from knowledge object
+  const [knowledgeObject, setKnowledgeObject] = useState(''); // New state for 'objetosDoConhecimento'
+  const [selectedSkill, setSelectedSkill] = useState<string>('');
+  const [aulaDuracao, setAulaDuracao] = useState<string>('');
+  const [additionalInstructions, setAdditionalInstructions] = useState('');
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [generatedPlan, setGeneratedPlan] = useState('');
   const [suggestingContent, setSuggestingContent] = useState(false);
@@ -66,139 +79,185 @@ export default function DashboardPage() {
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    // Fetch Escopo-Sequencia data on mount
-    const fetchData = async () => {
-      try {
-        setLoadingData(true);
-        const data = await getEscopoSequenciaData();
-        setEscopoData(data);
-      } catch (error) {
-        console.error("Error fetching escopo-sequencia data:", error);
-        // Handle error (e.g., show a toast message)
-      } finally {
-        setLoadingData(false);
-      }
+    // Load Escopo-Sequencia data from localStorage on mount (client-side only)
+    const loadData = () => {
+      setLoadingData(true);
+      const data = getEscopoDataFromStorage();
+      setEscopoData(data);
+       if (data.length === 0) {
+         setShowDataMissingAlert(true); // Show alert if no data found
+       } else {
+         setShowDataMissingAlert(false);
+       }
+      setLoadingData(false);
     };
-    fetchData();
-  }, []);
 
-  // Derived options based on selections
-  const availableYears = useMemo(() => {
-    if (!educationLevel || !escopoData.length) return [];
-    // Basic filtering logic - adjust based on actual data structure and level mapping
-    let filterFunc: (item: EscopoSequenciaItem) => boolean;
-     if (educationLevel === 'Ensino Fundamental: Anos Iniciais') {
-        filterFunc = item => ['1º ano', '2º ano', '3º ano', '4º ano', '5º ano'].includes(item.anoSerie);
-     } else if (educationLevel === 'Ensino Fundamental: Anos Finais') {
-       filterFunc = item => ['6º ano', '7º ano', '8º ano', '9º ano'].includes(item.anoSerie);
-     } else if (educationLevel === 'Ensino Médio' || educationLevel === 'Ensino Médio Noturno') {
-        filterFunc = item => ['1ª série', '2ª série', '3ª série'].includes(item.anoSerie);
-     } else {
-       filterFunc = () => false;
-     }
-    return [...new Set(escopoData.filter(filterFunc).map(item => item.anoSerie))].sort();
-  }, [educationLevel, escopoData]);
+    // Ensure this runs only on the client
+    if (typeof window !== 'undefined') {
+      loadData();
+       // Optional: Add event listener to reload data if it's updated elsewhere (e.g., after upload)
+       window.addEventListener('escopoDataUpdated', loadData);
+       return () => window.removeEventListener('escopoDataUpdated', loadData);
+    } else {
+      setLoadingData(false); // Set loading false on server
+       setShowDataMissingAlert(true); // Assume no data on server
+    }
 
-  const availableSubjects = useMemo(() => {
-    if (!yearSeries || !escopoData.length) return [];
-    return [...new Set(escopoData.filter(item => item.anoSerie === yearSeries).map(item => item.disciplina))].sort();
-  }, [yearSeries, escopoData]);
+  }, []); // Empty dependency array ensures this runs once on mount/client load
 
-  const availableContents = useMemo(() => {
-    if (!subject || !yearSeries || !escopoData.length) return [];
-    return [...new Set(escopoData.filter(item => item.anoSerie === yearSeries && item.disciplina === subject).map(item => item.conteudo))].sort();
-  }, [subject, yearSeries, escopoData]);
+  // --- Derived options based on selections ---
 
- const availableSkills = useMemo(() => {
-    if (!content || !subject || !yearSeries || !escopoData.length) return [];
-    const skillsSet = new Set<string>();
-    escopoData
-      .filter(item => item.anoSerie === yearSeries && item.disciplina === subject && item.conteudo === content)
-      .forEach(item => item.habilidades.forEach(skill => skillsSet.add(skill)));
-    return Array.from(skillsSet).sort();
-  }, [content, subject, yearSeries, escopoData]);
+  // Available Years/Series (unique values from the loaded data)
+   const availableYears = useMemo(() => {
+     if (!escopoData.length) return [];
+     // Sort based on typical school order (needs refinement for mixed 'ano'/'série')
+     const sortedYears = [...new Set(escopoData.map(item => item.anoSerie))]
+         .sort((a, b) => {
+             const numA = parseInt(a.match(/\d+/)?.[0] || '0');
+             const numB = parseInt(b.match(/\d+/)?.[0] || '0');
+             const typeA = a.includes('série') ? 1 : 0;
+             const typeB = b.includes('série') ? 1 : 0;
 
-  // Reset dependent fields when a higher-level field changes
-  const handleEducationLevelChange = (value: string) => {
-    setEducationLevel(value as EducationLevel);
-    setYearSeries('');
+             if (typeA !== typeB) return typeA - typeB; // Group 'ano' then 'série'
+             return numA - numB;
+         });
+     return sortedYears;
+   }, [escopoData]);
+
+   // Available Subjects for the selected Year/Series
+   const availableSubjects = useMemo(() => {
+     if (!yearSeries || !escopoData.length) return [];
+     return [...new Set(escopoData.filter(item => item.anoSerie === yearSeries).map(item => item.disciplina))].sort();
+   }, [yearSeries, escopoData]);
+
+    // Available Knowledge Objects for the selected Year/Series and Subject
+   const availableKnowledgeObjects = useMemo(() => {
+     if (!subject || !yearSeries || !escopoData.length) return [];
+     return [...new Set(escopoData.filter(item => item.anoSerie === yearSeries && item.disciplina === subject).map(item => item.objetosDoConhecimento))].sort();
+   }, [subject, yearSeries, escopoData]);
+
+  // Available Skills based on Year, Subject, and Knowledge Object
+  const availableSkills = useMemo(() => {
+      if (!knowledgeObject || !subject || !yearSeries || !escopoData.length) return [];
+      // Find items matching the current selection
+      const matchingItems = escopoData.filter(item =>
+          item.anoSerie === yearSeries &&
+          item.disciplina === subject &&
+          item.objetosDoConhecimento === knowledgeObject
+      );
+      // Extract unique skills from matching items
+      const skillsSet = new Set<string>();
+      matchingItems.forEach(item => {
+           // Handle potential variations in how skills are stored (string vs array)
+           if (typeof item.habilidade === 'string') {
+              skillsSet.add(item.habilidade.trim());
+           } else if (Array.isArray(item.habilidades)) { // Check for the original 'habilidades' array if needed
+              item.habilidades.forEach(skill => skillsSet.add(skill.trim()));
+           }
+      });
+      return Array.from(skillsSet).sort();
+  }, [knowledgeObject, subject, yearSeries, escopoData]);
+
+   // Derive Content based on the selected Knowledge Object (find the first matching content)
+    useEffect(() => {
+        if (!knowledgeObject || !subject || !yearSeries || !escopoData.length) {
+            setContent('');
+            return;
+        }
+        const matchingItem = escopoData.find(item =>
+            item.anoSerie === yearSeries &&
+            item.disciplina === subject &&
+            item.objetosDoConhecimento === knowledgeObject
+        );
+        setContent(matchingItem?.conteudo || ''); // Set content from the first match, or empty if none
+    }, [knowledgeObject, subject, yearSeries, escopoData]);
+
+
+  // --- Reset dependent fields when a higher-level field changes ---
+  const handleYearChange = (value: string) => {
+    setYearSeries(value);
     setSubject('');
-    setContent('');
+    setKnowledgeObject('');
     setSelectedSkill('');
+    setContent(''); // Content is now derived
     setAulaDuracao('');
     setGeneratedPlan('');
     setSuggestedContent([]);
   };
 
-  const handleYearChange = (value: string) => {
-    setYearSeries(value);
-    setSubject('');
-    setContent('');
-    setSelectedSkill('');
-    setAulaDuracao('');
-     setGeneratedPlan('');
-     setSuggestedContent([]);
-  };
-
   const handleSubjectChange = (value: string) => {
     setSubject(value);
-    setContent('');
+    setKnowledgeObject('');
     setSelectedSkill('');
+     setContent(''); // Content is now derived
     setAulaDuracao('');
-     setGeneratedPlan('');
-      setSuggestedContent([]);
+    setGeneratedPlan('');
+    setSuggestedContent([]);
   };
 
- const handleContentChange = (value: string) => {
-    setContent(value);
-    setSelectedSkill(''); // Reset skills when content changes
+   const handleKnowledgeObjectChange = (value: string) => {
+     setKnowledgeObject(value);
+     setSelectedSkill(''); // Reset skills when knowledge object changes
+     // Content will be updated by the useEffect hook
      setGeneratedPlan('');
-      setSuggestedContent([]);
-  };
+     setSuggestedContent([]);
+   };
 
 
   const handleSkillChange = (skill: string) => {
-    setSelectedSkill(skill); // Directly set the selected skill
-     setGeneratedPlan(''); // Clear plan if skills change
-     setSuggestedContent([]);
+    setSelectedSkill(skill);
+    setGeneratedPlan('');
+    setSuggestedContent([]);
   };
 
   const handleDurationChange = (value: string) => {
       setAulaDuracao(value);
-      setGeneratedPlan(''); // Clear plan if duration changes
+      setGeneratedPlan('');
       setSuggestedContent([]);
   };
 
 
   const handleGeneratePlan = async () => {
-    if (!subject || !yearSeries || !selectedSkill || !content || !aulaDuracao) {
-      // Add validation feedback (e.g., toast)
-      console.error("Por favor, preencha todos os campos obrigatórios, incluindo a duração da aula.");
+    if (!subject || !yearSeries || !selectedSkill || !knowledgeObject || !aulaDuracao) { // Check knowledgeObject instead of content
+      console.error("Por favor, preencha todos os campos obrigatórios (Ano/Série, Disciplina, Objeto de Conhecimento, Habilidade, Duração).");
       // TODO: Show toast message
       return;
     }
 
+     // Re-derive content just before generating, in case state update was pending
+     const derivedContent = escopoData.find(item =>
+            item.anoSerie === yearSeries &&
+            item.disciplina === subject &&
+            item.objetosDoConhecimento === knowledgeObject
+        )?.conteudo || '';
+
+      if (!derivedContent) {
+          console.error("Não foi possível encontrar o conteúdo correspondente para o objeto de conhecimento selecionado.");
+          // TODO: Show toast
+          return;
+      }
+
+
     setGeneratingPlan(true);
     setGeneratedPlan('');
-    setSuggestingContent(false); // Reset suggestion state
-    setSuggestedContent([]); // Clear previous suggestions
+    setSuggestingContent(false);
+    setSuggestedContent([]);
 
     const input: GenerateLessonPlanInput = {
       disciplina: subject,
       anoSerie: yearSeries,
-      habilidade: selectedSkill, // Pass the single selected skill
-      conteudo: content,
+      habilidade: selectedSkill,
+      conteudo: derivedContent, // Use the derived content
       aulaDuracao: aulaDuracao,
       orientacoesAdicionais: additionalInstructions || undefined,
     };
 
     try {
-      // console.log("Calling AI with input:", input);
       const response = await generateLessonPlan(input);
       setGeneratedPlan(response.lessonPlan);
 
-      // After generating the plan, suggest additional content
-      handleSuggestContent(input.conteudo, input.anoSerie, input.disciplina, response.lessonPlan);
+      // Suggest additional content based on the derived content
+      handleSuggestContent(derivedContent, input.anoSerie, input.disciplina, response.lessonPlan);
 
     } catch (error) {
       console.error("Error generating lesson plan:", error);
@@ -214,12 +273,11 @@ export default function DashboardPage() {
      setSuggestingContent(true);
      setSuggestedContent([]);
      try {
-       // Prepare input for suggestion (adjust if schema differs)
        const input: SuggestAdditionalContentInput = {
-           topic: topic, // Assuming 'topic' is equivalent to 'conteudo'
-           gradeLevel: gradeLevel, // Assuming 'gradeLevel' is equivalent to 'anoSerie'
-           subject: subject, // 'subject' is equivalent to 'disciplina'
-           currentContent: currentContent // Pass the generated lesson plan as current content
+           topic: topic, // Use the derived content as the topic
+           gradeLevel: gradeLevel,
+           subject: subject,
+           currentContent: currentContent
        };
        const response = await suggestAdditionalContent(input);
        setSuggestedContent(response.additionalContentSuggestions);
@@ -267,8 +325,34 @@ export default function DashboardPage() {
 
       {/* Main Content */}
        <main className="flex-1 p-4 md:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+         {/* Data Missing Alert */}
+         {showDataMissingAlert && !loadingData && user?.username === 'admin' && (
+            <div className="lg:col-span-2">
+                <Alert variant="destructive">
+                 <AlertTriangle className="h-4 w-4" />
+                 <AlertTitle>Dados Não Encontrados</AlertTitle>
+                 <AlertDescription>
+                   Os dados do Escopo-Sequência não foram encontrados no armazenamento local. Por favor, vá para <Link href="/settings" className="font-medium underline">Configurações</Link> para fazer o upload do arquivo XLSX.
+                 </AlertDescription>
+                </Alert>
+            </div>
+         )}
+          {showDataMissingAlert && !loadingData && user?.username !== 'admin' && (
+            <div className="lg:col-span-2">
+                <Alert variant="destructive">
+                 <AlertTriangle className="h-4 w-4" />
+                 <AlertTitle>Dados Não Disponíveis</AlertTitle>
+                 <AlertDescription>
+                   Os dados necessários para gerar planos de aula não estão disponíveis. Entre em contato com o administrador para fazer o upload dos dados.
+                 </AlertDescription>
+                </Alert>
+            </div>
+         )}
+
+
         {/* Left Column: Form */}
-        <Card className="shadow-md">
+        <Card className={`shadow-md ${showDataMissingAlert ? 'opacity-50 pointer-events-none' : ''}`}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
               <GraduationCap className="h-6 w-6 text-primary" />
@@ -277,28 +361,8 @@ export default function DashboardPage() {
             <CardDescription>Selecione as opções para gerar um plano de aula com IA.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Education Level */}
-            <div className="space-y-2">
-              <Label htmlFor="educationLevel" className="flex items-center gap-1">
-                 <BookCopy className="h-4 w-4" /> Nível de Ensino *
-              </Label>
-              <Select
-                value={educationLevel}
-                onValueChange={handleEducationLevelChange}
-                disabled={loadingData || generatingPlan}
-              >
-                <SelectTrigger id="educationLevel">
-                  <SelectValue placeholder={loadingData ? "Carregando..." : "Selecione o nível"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {educationLevels.map(level => (
-                    <SelectItem key={level} value={level}>{level}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
 
-            {/* Year/Series */}
+             {/* Year/Series */}
             <div className="space-y-2">
               <Label htmlFor="yearSeries" className="flex items-center gap-1">
                  <BookCopy className="h-4 w-4" /> Ano/Série *
@@ -306,14 +370,14 @@ export default function DashboardPage() {
               <Select
                 value={yearSeries}
                 onValueChange={handleYearChange}
-                disabled={!educationLevel || loadingData || generatingPlan}
+                disabled={loadingData || generatingPlan || escopoData.length === 0}
               >
                 <SelectTrigger id="yearSeries">
-                  <SelectValue placeholder={!educationLevel ? "Selecione o nível primeiro" : "Selecione o ano/série"} />
+                  <SelectValue placeholder={loadingData ? "Carregando..." : "Selecione o ano/série"} />
                 </SelectTrigger>
                 <SelectContent>
                   {availableYears.map(year => (
-                    <SelectItem key={year} value={year}>{year}</SelectItem>
+                    <SelectItem key={year} value={year}>{year} ({getEducationLevel(year)})</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -327,52 +391,63 @@ export default function DashboardPage() {
               <Select
                 value={subject}
                 onValueChange={handleSubjectChange}
-                disabled={!yearSeries || loadingData || generatingPlan}
+                disabled={!yearSeries || loadingData || generatingPlan || escopoData.length === 0}
               >
                 <SelectTrigger id="subject">
                   <SelectValue placeholder={!yearSeries ? "Selecione ano/série primeiro" : "Selecione a disciplina"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableSubjects.map(sub => (
-                    <SelectItem key={sub} value={sub}>{sub}</SelectItem>
-                  ))}
+                   <ScrollArea className="h-[200px]">
+                      {availableSubjects.map(sub => (
+                        <SelectItem key={sub} value={sub}>{sub}</SelectItem>
+                      ))}
+                   </ScrollArea>
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Content (Conteudo) */}
+            {/* Knowledge Object (Objetos do Conhecimento) */}
             <div className="space-y-2">
-              <Label htmlFor="content" className="flex items-center gap-1">
-                 <Target className="h-4 w-4" /> Conteúdo *
+              <Label htmlFor="knowledgeObject" className="flex items-center gap-1">
+                 <Target className="h-4 w-4" /> Objeto de Conhecimento *
               </Label>
               <Select
-                value={content}
-                onValueChange={handleContentChange}
-                disabled={!subject || loadingData || generatingPlan}
+                value={knowledgeObject}
+                onValueChange={handleKnowledgeObjectChange}
+                disabled={!subject || loadingData || generatingPlan || escopoData.length === 0}
               >
-                <SelectTrigger id="content">
-                  <SelectValue placeholder={!subject ? "Selecione a disciplina primeiro" : "Selecione o conteúdo"} />
+                <SelectTrigger id="knowledgeObject">
+                  <SelectValue placeholder={!subject ? "Selecione a disciplina primeiro" : "Selecione o objeto de conhecimento"} />
                 </SelectTrigger>
                 <SelectContent>
                    <ScrollArea className="h-[200px]"> {/* Scroll for long lists */}
-                     {availableContents.map(cont => (
-                       <SelectItem key={cont} value={cont}>{cont}</SelectItem>
+                     {availableKnowledgeObjects.map(obj => (
+                       <SelectItem key={obj} value={obj}>{obj}</SelectItem>
                      ))}
                    </ScrollArea>
                 </SelectContent>
               </Select>
             </div>
 
-             {/* Skills (Habilidade) - Changed to RadioGroup */}
+             {/* Derived Content Display (Read-only) */}
+             {content && (
+                 <div className="space-y-1 rounded-md border border-input bg-secondary p-3 text-sm text-secondary-foreground">
+                     <Label className="text-xs font-medium text-muted-foreground">Conteúdo Derivado:</Label>
+                     <p>{content}</p>
+                 </div>
+             )}
+
+
+             {/* Skills (Habilidade) - RadioGroup */}
              {availableSkills.length > 0 && (
                <div className="space-y-2">
                  <Label className="flex items-center gap-1"><ListChecks className="h-4 w-4" /> Habilidade *</Label>
-                 <Card className="p-4 bg-secondary">
-                   <ScrollArea className="h-[150px]"> {/* Scroll for long lists */}
+                 <Card className="p-4 bg-muted/50 border border-input">
+                   <ScrollArea className="h-[150px]">
                      <RadioGroup
                         value={selectedSkill}
                         onValueChange={handleSkillChange}
-                        disabled={generatingPlan}
+                        disabled={generatingPlan || escopoData.length === 0}
                         className="space-y-2"
                      >
                        {availableSkills.map(skill => (
@@ -397,10 +472,11 @@ export default function DashboardPage() {
                <Select
                  value={aulaDuracao}
                  onValueChange={handleDurationChange}
-                 disabled={!content || loadingData || generatingPlan} // Enable when content is selected
+                 // Enable when a skill is selected
+                 disabled={!selectedSkill || loadingData || generatingPlan || escopoData.length === 0}
                >
                  <SelectTrigger id="aulaDuracao">
-                   <SelectValue placeholder={!content ? "Selecione o conteúdo primeiro" : "Selecione a duração"} />
+                   <SelectValue placeholder={!selectedSkill ? "Selecione uma habilidade primeiro" : "Selecione a duração"} />
                  </SelectTrigger>
                  <SelectContent>
                    {aulaDuracaoOptions.map(dur => (
@@ -422,14 +498,14 @@ export default function DashboardPage() {
                 value={additionalInstructions}
                 onChange={(e) => setAdditionalInstructions(e.target.value)}
                 rows={3}
-                disabled={generatingPlan}
+                disabled={generatingPlan || escopoData.length === 0}
               />
             </div>
 
             {/* Generate Button */}
             <Button
               onClick={handleGeneratePlan}
-              disabled={!content || !selectedSkill || !aulaDuracao || loadingData || generatingPlan} // Updated condition
+              disabled={!knowledgeObject || !selectedSkill || !aulaDuracao || loadingData || generatingPlan || escopoData.length === 0} // Updated condition
               className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
             >
               {generatingPlan ? 'Gerando...' : 'Gerar Plano de Aula'}
@@ -463,21 +539,29 @@ export default function DashboardPage() {
                             line = line.trim(); // Trim whitespace
 
                             // Section Headers (bold or ##)
-                            if (line.startsWith('**') && line.endsWith('**') || line.startsWith('## ')) {
+                            if ((line.startsWith('**') && line.endsWith('**') || line.startsWith('## ')) && !line.includes(':')) {
                                 const headerText = line.replace(/^\*\*|^\## |\*\*$/g, '');
-                                return <h3 key={index} className="font-bold text-lg my-3 pt-2 border-t">{headerText}</h3>;
+                                return <h3 key={index} className="font-semibold text-lg my-3 pt-3 border-t first:border-t-0 first:pt-0">{headerText}</h3>;
                             }
-                             // Sub-headers (bold within sections)
-                            if (line.startsWith('*') && line.endsWith('*') && !line.startsWith('**')) {
-                                return <p key={index} className="font-semibold my-1">{line.slice(1, -1)}</p>;
+                             // Sub-headers (bold within sections, ending with :)
+                            if (line.startsWith('**') && line.endsWith('**:')) {
+                                return <p key={index} className="font-semibold my-1">{line.slice(2, -2)}:</p>;
                             }
-                            // Bullet points
+                             // Sub-headers (bold within sections, no colon) - less common now
+                            // if (line.startsWith('*') && line.endsWith('*') && !line.startsWith('**')) {
+                            //     return <p key={index} className="font-semibold my-1">{line.slice(1, -1)}</p>;
+                            // }
+                            // Bullet points (* or -)
                              if (line.startsWith('* ') || line.startsWith('- ')) {
-                                return <li key={index} className="ml-4 list-disc">{line.slice(2)}</li>;
+                                return <li key={index} className="ml-5 list-disc">{line.slice(2)}</li>;
                             }
-                             // Numbered lists
+                             // Numbered lists (e.g., 1.)
                              if (/^\d+\.\s/.test(line)) {
-                                return <li key={index} className="ml-4 list-decimal">{line.replace(/^\d+\.\s/, '')}</li>;
+                                return <li key={index} className="ml-5 list-decimal">{line.replace(/^\d+\.\s/, '')}</li>;
+                             }
+                             // Estimated time in parentheses
+                             if (line.startsWith('(') && line.endsWith(')')) {
+                                 return <p key={index} className="text-xs text-muted-foreground italic my-1">{line}</p>;
                              }
                             // Regular paragraph
                             return <p key={index} className="my-1">{line}</p>;
@@ -499,7 +583,7 @@ export default function DashboardPage() {
                                     ))}
                                 </ul>
                             </div>
-                        ) : !generatingPlan && !suggestingContent ? ( // Show if no suggestions and not loading
+                        ) : !generatingPlan && !suggestingContent && generatedPlan ? ( // Show if no suggestions, not loading, and plan exists
                              <div className="mt-6 border-t pt-4">
                                 <p className="text-sm text-muted-foreground">Nenhuma sugestão de conteúdo adicional encontrada.</p>
                              </div>
@@ -507,7 +591,11 @@ export default function DashboardPage() {
 
                     </div>
                 ) : (
-                    <p className="text-muted-foreground">Selecione as opções e clique em "Gerar Plano de Aula".</p>
+                    <p className="text-muted-foreground">
+                        {escopoData.length === 0 && !loadingData
+                            ? "Carregue os dados do Escopo-Sequência nas configurações para começar."
+                            : "Selecione as opções e clique em \"Gerar Plano de Aula\"."}
+                     </p>
                 )}
                 </ScrollArea>
             </CardContent>
@@ -517,4 +605,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
