@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { List, ArrowLeft, Download, FileText, FileType, Pencil, Trash2 } from 'lucide-react'; // Added Pencil, Trash2
+import { List, ArrowLeft, Download, FileText, FileType, Pencil, Trash2, BookOpenCheck } from 'lucide-react'; // Added BookOpenCheck, Pencil, Trash2
 import { getPlansForUser, deletePlan, type SavedPlan, getPlanById } from '@/services/saved-plans';
 import { useToast } from "@/hooks/use-toast";
 import { format, formatDistanceToNow } from 'date-fns';
@@ -310,3 +310,4 @@ export default function SavedPlansPage() {
     </TooltipProvider>
   );
 }
+
