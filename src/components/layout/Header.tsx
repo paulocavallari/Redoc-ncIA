@@ -7,7 +7,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Settings, LogOut, List, ArrowLeft } from 'lucide-react';
+import { Settings, LogOut, Save, ArrowLeft } from 'lucide-react'; // Changed List to Save
 import Image from 'next/image'; // Import next/image
 
 export default function Header() {
@@ -25,7 +25,8 @@ export default function Header() {
   const minimalHeaderPages = ['/']; // Add any pages needing only the title
 
   // Determine visibility based on client-side state and pathname
-  const showFullHeader = isClient && !minimalHeaderPages.includes(pathname) && !noHeaderPages.includes(pathname);
+  // Always show header unless on login/register or root page (which redirects)
+  const showFullHeader = isClient && !noHeaderPages.includes(pathname) && !minimalHeaderPages.includes(pathname);
   const showBackButton = isClient && ['/settings', '/saved-plans'].includes(pathname);
 
   const handleBack = () => {
@@ -34,6 +35,12 @@ export default function Header() {
 
   // Render a consistent header structure for SSR to avoid hydration mismatch
   // Content visibility will be handled client-side.
+  // Hide header completely on login/register pages if desired
+  if (isClient && noHeaderPages.includes(pathname)) {
+      return null; // Don't render header on login/register
+  }
+
+
   return (
     <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6 shadow-sm">
       <div className="flex items-center gap-4">
@@ -75,7 +82,7 @@ export default function Header() {
               </span>
                <Link href="/saved-plans" passHref>
                  <Button variant="ghost" size="icon" aria-label="Planos Salvos">
-                   <List className="h-5 w-5" />
+                   <Save className="h-5 w-5" /> {/* Changed icon to Save */}
                  </Button>
                </Link>
               {user.username === 'admin' && (
@@ -99,27 +106,26 @@ export default function Header() {
                </Link>
              </>
           )
-        ) : isClient && !showFullHeader ? (
-            // Render login/register buttons on login/register pages if needed
-            // Or render nothing if it's a minimal header page
-            !noHeaderPages.includes(pathname) ? (
-                <>
-                 <Link href="/login" passHref>
-                    <Button variant="outline" size="sm">Entrar</Button>
-                  </Link>
-                  <Link href="/register" passHref>
-                    <Button variant="default" size="sm">Cadastrar</Button>
-                  </Link>
-                </>
-            ) : null
+        ) : isClient && !showFullHeader && !minimalHeaderPages.includes(pathname) ? (
+             // Render login/register buttons if needed (though covered by the outer check now)
+             <>
+              <Link href="/login" passHref>
+                 <Button variant="outline" size="sm">Entrar</Button>
+               </Link>
+               <Link href="/register" passHref>
+                 <Button variant="default" size="sm">Cadastrar</Button>
+               </Link>
+             </>
         ) : (
-          // SSR/Loading Skeleton for the right side
-          <>
-            <Skeleton className="h-5 w-24 hidden sm:inline" />
-            <Skeleton className="h-8 w-8 rounded-full" />
-            <Skeleton className="h-8 w-8 rounded-full" />
-            <Skeleton className="h-8 w-8 rounded-full" />
-          </>
+          // SSR/Loading Skeleton for the right side (only shown if not client or during auth loading)
+           !isClient ? (
+              <>
+                <Skeleton className="h-5 w-24 hidden sm:inline" />
+                <Skeleton className="h-8 w-8 rounded-full" />
+                <Skeleton className="h-8 w-8 rounded-full" />
+                <Skeleton className="h-8 w-8 rounded-full" />
+              </>
+           ) : null // Render nothing if client and on minimal/no-header pages
         )}
       </div>
     </header>
