@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -8,13 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'; // Import RadioGroup
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Settings, LogOut, BookOpenCheck, GraduationCap, BookCopy, Target, ListChecks, MessageSquare, Bot } from 'lucide-react';
+import { Settings, LogOut, BookOpenCheck, GraduationCap, BookCopy, Target, ListChecks, MessageSquare, Bot, Clock } from 'lucide-react';
 import { getEscopoSequenciaData, type EscopoSequenciaItem } from '@/services/escopo-sequencia';
 import { generateLessonPlan, type GenerateLessonPlanInput } from '@/ai/flows/generate-lesson-plan';
-import { suggestAdditionalContent, type SuggestAdditionalContentInput } from '@/ai/flows/suggest-additional-content'; // Import suggestAdditionalContent
+import { suggestAdditionalContent, type SuggestAdditionalContentInput } from '@/ai/flows/suggest-additional-content';
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 
@@ -31,6 +31,12 @@ const educationLevels: EducationLevel[] = [
   'Ensino Médio Noturno',
 ];
 
+const aulaDuracaoOptions: string[] = [
+    '1 aula (45/50 min)',
+    '2 aulas (90/100 min)',
+    '3 aulas (135/150 min)',
+];
+
 export default function DashboardPage() {
   const { user, logout, isLoading: authLoading } = useAuth();
   const router = useRouter();
@@ -41,10 +47,11 @@ export default function DashboardPage() {
   // Form State
   const [educationLevel, setEducationLevel] = useState<EducationLevel | ''>('');
   const [yearSeries, setYearSeries] = useState('');
-  const [subject, setSubject] = useState('');
-  const [content, setContent] = useState('');
-  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
-  const [additionalInstructions, setAdditionalInstructions] = useState('');
+  const [subject, setSubject] = useState(''); // 'disciplina' in Portuguese
+  const [content, setContent] = useState(''); // 'conteudo' in Portuguese
+  const [selectedSkill, setSelectedSkill] = useState<string>(''); // Changed from array to single string
+  const [aulaDuracao, setAulaDuracao] = useState<string>(''); // New state for duration
+  const [additionalInstructions, setAdditionalInstructions] = useState(''); // 'orientacoesAdicionais'
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [generatedPlan, setGeneratedPlan] = useState('');
   const [suggestingContent, setSuggestingContent] = useState(false);
@@ -117,7 +124,8 @@ export default function DashboardPage() {
     setYearSeries('');
     setSubject('');
     setContent('');
-    setSelectedSkills([]);
+    setSelectedSkill('');
+    setAulaDuracao('');
     setGeneratedPlan('');
     setSuggestedContent([]);
   };
@@ -126,7 +134,8 @@ export default function DashboardPage() {
     setYearSeries(value);
     setSubject('');
     setContent('');
-    setSelectedSkills([]);
+    setSelectedSkill('');
+    setAulaDuracao('');
      setGeneratedPlan('');
      setSuggestedContent([]);
   };
@@ -134,35 +143,38 @@ export default function DashboardPage() {
   const handleSubjectChange = (value: string) => {
     setSubject(value);
     setContent('');
-    setSelectedSkills([]);
+    setSelectedSkill('');
+    setAulaDuracao('');
      setGeneratedPlan('');
       setSuggestedContent([]);
   };
 
  const handleContentChange = (value: string) => {
     setContent(value);
-    setSelectedSkills([]); // Reset skills when content changes
+    setSelectedSkill(''); // Reset skills when content changes
      setGeneratedPlan('');
       setSuggestedContent([]);
   };
 
 
   const handleSkillChange = (skill: string) => {
-    setSelectedSkills(prev =>
-      prev.includes(skill) ? prev.filter(s => s !== skill) : [...prev, skill]
-    );
+    setSelectedSkill(skill); // Directly set the selected skill
      setGeneratedPlan(''); // Clear plan if skills change
      setSuggestedContent([]);
   };
 
- const calculateClassDuration = useCallback(() => {
-    return educationLevel === 'Ensino Médio Noturno' ? 45 : 50;
-  }, [educationLevel]);
+  const handleDurationChange = (value: string) => {
+      setAulaDuracao(value);
+      setGeneratedPlan(''); // Clear plan if duration changes
+      setSuggestedContent([]);
+  };
+
 
   const handleGeneratePlan = async () => {
-    if (!educationLevel || !yearSeries || !subject || !content || selectedSkills.length === 0) {
+    if (!subject || !yearSeries || !selectedSkill || !content || !aulaDuracao) {
       // Add validation feedback (e.g., toast)
-      console.error("Please fill all required fields");
+      console.error("Por favor, preencha todos os campos obrigatórios, incluindo a duração da aula.");
+      // TODO: Show toast message
       return;
     }
 
@@ -172,32 +184,25 @@ export default function DashboardPage() {
     setSuggestedContent([]); // Clear previous suggestions
 
     const input: GenerateLessonPlanInput = {
-      educationLevel: educationLevel,
-      year: yearSeries,
-      subject: subject,
-      content: content,
-      skills: selectedSkills,
-      additionalInstructions: additionalInstructions || undefined, // Pass undefined if empty
-      classDurationMinutes: calculateClassDuration(),
+      disciplina: subject,
+      anoSerie: yearSeries,
+      habilidade: selectedSkill, // Pass the single selected skill
+      conteudo: content,
+      aulaDuracao: aulaDuracao,
+      orientacoesAdicionais: additionalInstructions || undefined,
     };
 
     try {
-      // Simulate API Call
-      // console.log("Simulating AI call with input:", input);
-      // await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate delay
-      // const dummyResponse = `**Plano de Aula Sugerido:**\n\n*   **Introdução (10 min):** Discussão sobre ${input.content}.\n*   **Desenvolvimento (25 min):** Explicação e exemplos.\n*   **Atividade (10 min):** Exercícios práticos.\n*   **Avaliação (5 min):** Perguntas rápidas.`;
-      // setGeneratedPlan(dummyResponse);
-
+      // console.log("Calling AI with input:", input);
       const response = await generateLessonPlan(input);
       setGeneratedPlan(response.lessonPlan);
 
-       // After generating the plan, suggest additional content
-        handleSuggestContent(input.content, input.year, input.subject, response.lessonPlan);
-
+      // After generating the plan, suggest additional content
+      handleSuggestContent(input.conteudo, input.anoSerie, input.disciplina, response.lessonPlan);
 
     } catch (error) {
       console.error("Error generating lesson plan:", error);
-      setGeneratedPlan("Erro ao gerar o plano de aula. Tente novamente.");
+      setGeneratedPlan("Erro ao gerar o plano de aula. Verifique sua chave de API e tente novamente.");
       // Handle error (e.g., show toast)
     } finally {
       setGeneratingPlan(false);
@@ -209,7 +214,13 @@ export default function DashboardPage() {
      setSuggestingContent(true);
      setSuggestedContent([]);
      try {
-       const input: SuggestAdditionalContentInput = { topic, gradeLevel, subject, currentContent };
+       // Prepare input for suggestion (adjust if schema differs)
+       const input: SuggestAdditionalContentInput = {
+           topic: topic, // Assuming 'topic' is equivalent to 'conteudo'
+           gradeLevel: gradeLevel, // Assuming 'gradeLevel' is equivalent to 'anoSerie'
+           subject: subject, // 'subject' is equivalent to 'disciplina'
+           currentContent: currentContent // Pass the generated lesson plan as current content
+       };
        const response = await suggestAdditionalContent(input);
        setSuggestedContent(response.additionalContentSuggestions);
      } catch (error) {
@@ -308,7 +319,7 @@ export default function DashboardPage() {
               </Select>
             </div>
 
-            {/* Subject */}
+            {/* Subject (Disciplina) */}
             <div className="space-y-2">
               <Label htmlFor="subject" className="flex items-center gap-1">
                  <BookCopy className="h-4 w-4" /> Disciplina *
@@ -329,7 +340,7 @@ export default function DashboardPage() {
               </Select>
             </div>
 
-            {/* Content */}
+            {/* Content (Conteudo) */}
             <div className="space-y-2">
               <Label htmlFor="content" className="flex items-center gap-1">
                  <Target className="h-4 w-4" /> Conteúdo *
@@ -352,33 +363,55 @@ export default function DashboardPage() {
               </Select>
             </div>
 
-            {/* Skills */}
-            {availableSkills.length > 0 && (
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1"><ListChecks className="h-4 w-4" /> Habilidades *</Label>
-                <Card className="p-4 bg-secondary">
-                  <ScrollArea className="h-[150px]"> {/* Scroll for long lists */}
-                    <div className="space-y-2">
-                      {availableSkills.map(skill => (
-                        <div key={skill} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={`skill-${skill}`}
-                            checked={selectedSkills.includes(skill)}
-                            onCheckedChange={() => handleSkillChange(skill)}
-                            disabled={generatingPlan}
-                          />
-                          <Label htmlFor={`skill-${skill}`} className="text-sm font-normal cursor-pointer">
-                            {skill}
-                          </Label>
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                </Card>
-              </div>
-            )}
+             {/* Skills (Habilidade) - Changed to RadioGroup */}
+             {availableSkills.length > 0 && (
+               <div className="space-y-2">
+                 <Label className="flex items-center gap-1"><ListChecks className="h-4 w-4" /> Habilidade *</Label>
+                 <Card className="p-4 bg-secondary">
+                   <ScrollArea className="h-[150px]"> {/* Scroll for long lists */}
+                     <RadioGroup
+                        value={selectedSkill}
+                        onValueChange={handleSkillChange}
+                        disabled={generatingPlan}
+                        className="space-y-2"
+                     >
+                       {availableSkills.map(skill => (
+                         <div key={skill} className="flex items-center space-x-2">
+                           <RadioGroupItem value={skill} id={`skill-${skill}`} />
+                           <Label htmlFor={`skill-${skill}`} className="text-sm font-normal cursor-pointer">
+                             {skill}
+                           </Label>
+                         </div>
+                       ))}
+                     </RadioGroup>
+                   </ScrollArea>
+                 </Card>
+               </div>
+             )}
 
-            {/* Additional Instructions */}
+            {/* Lesson Duration (Duração da Aula) */}
+             <div className="space-y-2">
+               <Label htmlFor="aulaDuracao" className="flex items-center gap-1">
+                 <Clock className="h-4 w-4" /> Duração da Aula *
+               </Label>
+               <Select
+                 value={aulaDuracao}
+                 onValueChange={handleDurationChange}
+                 disabled={!content || loadingData || generatingPlan} // Enable when content is selected
+               >
+                 <SelectTrigger id="aulaDuracao">
+                   <SelectValue placeholder={!content ? "Selecione o conteúdo primeiro" : "Selecione a duração"} />
+                 </SelectTrigger>
+                 <SelectContent>
+                   {aulaDuracaoOptions.map(dur => (
+                     <SelectItem key={dur} value={dur}>{dur}</SelectItem>
+                   ))}
+                 </SelectContent>
+               </Select>
+             </div>
+
+
+            {/* Additional Instructions (Orientações Adicionais) */}
             <div className="space-y-2">
               <Label htmlFor="additionalInstructions" className="flex items-center gap-1">
                  <MessageSquare className="h-4 w-4" /> Orientações Adicionais
@@ -396,7 +429,7 @@ export default function DashboardPage() {
             {/* Generate Button */}
             <Button
               onClick={handleGeneratePlan}
-              disabled={!content || selectedSkills.length === 0 || loadingData || generatingPlan}
+              disabled={!content || !selectedSkill || !aulaDuracao || loadingData || generatingPlan} // Updated condition
               className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
             >
               {generatingPlan ? 'Gerando...' : 'Gerar Plano de Aula'}
@@ -424,21 +457,36 @@ export default function DashboardPage() {
                     <Skeleton className="h-4 w-5/6" />
                     </div>
                 ) : generatedPlan ? (
+                   // Enhanced rendering for markdown-like structure
                    <div className="prose prose-sm max-w-none dark:prose-invert whitespace-pre-wrap">
                        {generatedPlan.split('\n').map((line, index) => {
-                            // Basic formatting enhancements
-                            if (line.startsWith('**') && line.endsWith('**')) {
-                                return <p key={index} className="font-bold text-lg my-2">{line.slice(2, -2)}</p>;
-                            } else if (line.startsWith('*') || line.startsWith('-')) {
-                                return <li key={index} className="ml-4 list-disc">{line.slice(1).trim()}</li>;
+                            line = line.trim(); // Trim whitespace
+
+                            // Section Headers (bold or ##)
+                            if (line.startsWith('**') && line.endsWith('**') || line.startsWith('## ')) {
+                                const headerText = line.replace(/^\*\*|^\## |\*\*$/g, '');
+                                return <h3 key={index} className="font-bold text-lg my-3 pt-2 border-t">{headerText}</h3>;
                             }
-                            return <p key={index}>{line}</p>;
+                             // Sub-headers (bold within sections)
+                            if (line.startsWith('*') && line.endsWith('*') && !line.startsWith('**')) {
+                                return <p key={index} className="font-semibold my-1">{line.slice(1, -1)}</p>;
+                            }
+                            // Bullet points
+                             if (line.startsWith('* ') || line.startsWith('- ')) {
+                                return <li key={index} className="ml-4 list-disc">{line.slice(2)}</li>;
+                            }
+                             // Numbered lists
+                             if (/^\d+\.\s/.test(line)) {
+                                return <li key={index} className="ml-4 list-decimal">{line.replace(/^\d+\.\s/, '')}</li>;
+                             }
+                            // Regular paragraph
+                            return <p key={index} className="my-1">{line}</p>;
                        })}
 
                         {/* Display Suggested Content */}
                         {suggestingContent ? (
-                             <div className="mt-6 space-y-2">
-                                <p className="font-semibold">Sugerindo conteúdo adicional...</p>
+                             <div className="mt-6 space-y-2 border-t pt-4">
+                                <p className="font-semibold text-md">Sugerindo conteúdo adicional...</p>
                                 <Skeleton className="h-4 w-full" />
                                 <Skeleton className="h-4 w-3/4" />
                             </div>
@@ -451,6 +499,10 @@ export default function DashboardPage() {
                                     ))}
                                 </ul>
                             </div>
+                        ) : !generatingPlan && !suggestingContent ? ( // Show if no suggestions and not loading
+                             <div className="mt-6 border-t pt-4">
+                                <p className="text-sm text-muted-foreground">Nenhuma sugestão de conteúdo adicional encontrada.</p>
+                             </div>
                         ) : null }
 
                     </div>
@@ -465,3 +517,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

@@ -11,7 +11,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Upload, KeyRound, ArrowLeft, BookOpenCheck } from 'lucide-react';
 import Link from 'next/link';
 
-const API_KEY_STORAGE_KEY = 'openai_api_key'; // Separate key for API key
+// Changed storage key to reflect Google GenAI API key
+const API_KEY_STORAGE_KEY = 'google_genai_api_key';
 
 export default function SettingsPage() {
   const { user, isLoading: authLoading } = useAuth();
@@ -108,13 +109,17 @@ export default function SettingsPage() {
     // Save to localStorage (client-side only)
      if (typeof window !== 'undefined') {
         localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
+        // Optionally, set the key in the environment for the backend/server actions if needed
+        // This client-side saving won't make it available to server components directly
+        // A proper solution might involve an API endpoint to securely store the key server-side.
+        console.warn("API key saved to localStorage. For server-side Genkit usage, ensure the GOOGLE_GENAI_API_KEY environment variable is set.")
      }
 
 
     setIsSavingKey(false);
     toast({
       title: "Chave API Salva",
-      description: "A chave da API OpenAI foi salva com sucesso (simulação).",
+       description: "A chave da API Google GenAI foi salva localmente (simulação).", // Updated text
     });
   };
 
@@ -181,15 +186,15 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          {/* API Key Card */}
+           {/* Google GenAI API Key Card */}
           <Card className="shadow-md">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl">
                 <KeyRound className="h-6 w-6 text-primary" />
-                Chave de API OpenAI
+                Chave de API Google GenAI (Gemini)
               </CardTitle>
               <CardDescription>
-                Insira ou modifique sua chave de API da OpenAI para habilitar a geração de planos de aula.
+                Insira sua chave de API do Google GenAI (necessária para usar o Gemini) para habilitar a geração de planos de aula. A chave será salva localmente no seu navegador.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -198,7 +203,7 @@ export default function SettingsPage() {
                 <Input
                   id="apiKey"
                   type="password" // Use password type to mask the key
-                  placeholder="sk-..."
+                  placeholder="Sua chave da API do Google GenAI..."
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                    disabled={isSavingKey}

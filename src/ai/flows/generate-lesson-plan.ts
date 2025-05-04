@@ -1,7 +1,7 @@
 'use server';
 
 /**
- * @fileOverview A lesson plan generation AI agent.
+ * @fileOverview A lesson plan generation AI agent using Google Gemini.
  *
  * - generateLessonPlan - A function that handles the lesson plan generation process.
  * - GenerateLessonPlanInput - The input type for the generateLessonPlan function.
@@ -11,22 +11,23 @@
 import {ai} from '@/ai/ai-instance';
 import {z} from 'genkit';
 
+// Updated Input Schema to match the new prompt structure
 const GenerateLessonPlanInputSchema = z.object({
-  educationLevel: z.string().describe('The education level (e.g., Ensino Fundamental: Anos Finais).'),
-  year: z.string().describe('The year or series (e.g., 6º ano).'),
-  subject: z.string().describe('The subject (e.g., Matemática).'),
-  content: z.string().describe('The content to be taught (e.g., Números decimais).'),
-  skills: z.array(z.string()).describe('A list of skills associated with the content (e.g., [EF06MA07]).'),
-  additionalInstructions: z
+  disciplina: z.string().describe('Nome da Disciplina.'),
+  anoSerie: z.string().describe('Ano/Série (ex: 8º ano do Ensino Fundamental).'),
+  habilidade: z.string().describe('Código e/ou descrição completa da Habilidade do Currículo Paulista (ex: EF08MA06).'),
+  conteudo: z.string().describe('Conteúdo específico relacionado à habilidade (ex: Frações e seus significados).'),
+  aulaDuracao: z.string().describe('Duração estimada da aula (ex: 50 minutos ou 2 aulas de 50 minutos).'),
+  orientacoesAdicionais: z
     .string()
-    .describe('Additional instructions or context for the AI (e.g., turma com dificuldades de leitura).')
+    .describe('Orientações adicionais inseridas pelo usuário.')
     .optional(),
-  classDurationMinutes: z.number().describe('The duration of the class in minutes.'),
 });
 export type GenerateLessonPlanInput = z.infer<typeof GenerateLessonPlanInputSchema>;
 
+// Output Schema remains a string containing the detailed lesson plan
 const GenerateLessonPlanOutputSchema = z.object({
-  lessonPlan: z.string().describe('A detailed lesson plan suggestion.'),
+  lessonPlan: z.string().describe('A detailed lesson plan suggestion following the required structure.'),
 });
 export type GenerateLessonPlanOutput = z.infer<typeof GenerateLessonPlanOutputSchema>;
 
@@ -34,42 +35,69 @@ export async function generateLessonPlan(input: GenerateLessonPlanInput): Promis
   return generateLessonPlanFlow(input);
 }
 
+// Updated Prompt using the provided structure for Gemini
 const prompt = ai.definePrompt({
   name: 'generateLessonPlanPrompt',
   input: {
-    schema: z.object({
-      educationLevel: z.string().describe('The education level (e.g., Ensino Fundamental: Anos Finais).'),
-      year: z.string().describe('The year or series (e.g., 6º ano).'),
-      subject: z.string().describe('The subject (e.g., Matemática).'),
-      content: z.string().describe('The content to be taught (e.g., Números decimais).'),
-      skills: z.array(z.string()).describe('A list of skills associated with the content (e.g., [EF06MA07]).'),
-      additionalInstructions: z
-        .string()
-        .describe('Additional instructions or context for the AI (e.g., turma com dificuldades de leitura).')
-        .optional(),
-      classDurationMinutes: z.number().describe('The duration of the class in minutes.'),
-    }),
+    schema: GenerateLessonPlanInputSchema,
   },
   output: {
-    schema: z.object({
-      lessonPlan: z.string().describe('A detailed lesson plan suggestion.'),
-    }),
+    schema: GenerateLessonPlanOutputSchema,
   },
-  prompt: `You are an AI assistant designed to help teachers generate lesson plans.
+  prompt: `Instrução para a IA: Aja como um especialista em design instrucional e pedagogia, com foco no Currículo Paulista. Crie um plano de aula detalhado, prático e engajador com base nas informações fornecidas abaixo. A resposta DEVE seguir rigorosamente a estrutura solicitada.
 
-  Based on the following information, please generate a detailed lesson plan suggestion, including a step-by-step teaching sequence, teaching methodologies, and digital or physical resources.
+Informações da Aula:
 
-  Education Level: {{{educationLevel}}}
-  Year/Series: {{{year}}}
-  Subject: {{{subject}}}
-  Content: {{{content}}}
-  Skills: {{#each skills}}{{{this}}} {{/each}}
-  Class Duration: {{{classDurationMinutes}}} minutes
+Disciplina: {{{disciplina}}}
+Ano/Série: {{{anoSerie}}}
+Habilidade (Currículo Paulista): {{{habilidade}}}
+Conteúdo: {{{conteudo}}}
+Duração Estimada da Aula: {{{aulaDuracao}}}
+{{#if orientacoesAdicionais}}
+Orientações Adicionais: {{{orientacoesAdicionais}}}
+{{/if}}
 
-  {{#if additionalInstructions}}
-  Additional Instructions: {{{additionalInstructions}}}
-  {{/if}}
-  `,
+Estrutura Obrigatória da Resposta:
+
+Por favor, organize sua resposta exatamente nas seguintes seções:
+
+Introdução:
+
+Descreva como iniciar a aula para engajar os alunos.
+Inclua estratégias para ativar conhecimentos prévios sobre o tema.
+Apresente o objetivo da aula de forma clara para os alunos.
+(Tempo estimado para esta seção).
+
+Desenvolvimento:
+
+Detalhe o passo a passo das atividades principais da aula.
+Descreva a sequência didática de forma lógica.
+Explique como o conteúdo será apresentado e como a habilidade será trabalhada.
+Sugira momentos de interação, prática e aplicação do conhecimento.
+(Tempo estimado para cada etapa principal do desenvolvimento).
+
+Conclusão:
+
+Apresente formas de sistematizar o que foi aprendido.
+Sugira uma breve atividade de verificação de compreensão ou fechamento.
+Indique como conectar a aula com aprendizados futuros ou o cotidiano dos alunos.
+(Tempo estimado para esta seção).
+
+Recursos Utilizados:
+
+Liste todos os materiais necessários (digitais, impressos, manipuláveis, audiovisuais, etc.).
+Inclua links para recursos online, se aplicável.
+
+Metodologias Sugeridas:
+
+Indique as principais abordagens pedagógicas a serem empregadas (ex: Aprendizagem Baseada em Problemas, Sala de Aula Invertida, Rotação por Estações, Instrução Direta, Trabalho em Grupo, etc.).
+Justifique brevemente por que essas metodologias são adequadas para esta aula.
+
+Sugestões de adaptações para alunos Alvos da Educação Especial:
+
+Forneça estratégias e recursos específicos para garantir a inclusão e acessibilidade de alunos com diferentes necessidades (ex: Deficiência Intelectual, Visual, Auditiva, TEA, Altas Habilidades/Superdotação).
+Sugira adaptações nos materiais, nas atividades, no tempo e na avaliação.
+`,
 });
 
 const generateLessonPlanFlow = ai.defineFlow<
@@ -81,5 +109,8 @@ const generateLessonPlanFlow = ai.defineFlow<
   outputSchema: GenerateLessonPlanOutputSchema,
 }, async input => {
   const {output} = await prompt(input);
+  // Ensure the output format is strictly adhered to, although the prompt guides it.
+  // Basic validation could be added here if needed, but relying on the prompt for structure.
   return output!;
 });
+
