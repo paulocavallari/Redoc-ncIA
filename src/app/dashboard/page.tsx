@@ -39,16 +39,6 @@ const aulaDuracaoNoturnoOptions: string[] = [
     '2 aulas Noturno (80 min)',
 ];
 
-// Main section titles (less critical now with editor)
-const SECTION_TITLES = [
-    "Introdução:",
-    "Desenvolvimento:",
-    "Conclusão:",
-    "Recursos Utilizados:",
-    "Metodologias Sugeridas:",
-    "Sugestões de adaptações para alunos Alvos da Educação Especial:"
-];
-
 export default function DashboardPage() {
   const { user, logout, isLoading: authLoading } = useAuth();
   const router = useRouter();
@@ -72,7 +62,6 @@ export default function DashboardPage() {
   const [selectedMaterialFile, setSelectedMaterialFile] = useState<File | null>(null);
   const [readingFile, setReadingFile] = useState(false);
   const [generatingPlan, setGeneratingPlan] = useState(false);
-  // const [generatedPlan, setGeneratedPlan] = useState(''); // Keep for raw AI output reference if needed, or remove
   const [editablePlanContent, setEditablePlanContent] = useState<string>(''); // State for the editor content (HTML)
   const [suggestingContent, setSuggestingContent] = useState(false);
   const [suggestedContent, setSuggestedContent] = useState<string[]>([]);
@@ -178,7 +167,6 @@ export default function DashboardPage() {
     setSelectedContents([]);
     setSelectedSkills([]);
     setAulaDuracao('');
-    // setGeneratedPlan(''); // Keep raw output if needed
     setEditablePlanContent(''); // Clear editor content
     setIsPlanGenerated(false); // Reset generated flag
     setSuggestedContent([]);
@@ -227,14 +215,17 @@ export default function DashboardPage() {
   const markdownToHtml = (markdown: string): string => {
       try {
         // Basic sanitization: Remove potential script tags or dangerous attributes
+        // More robust sanitization might be needed depending on the trust level of the AI output
         const sanitizedMarkdown = markdown
             .replace(/<script.*?>.*?<\/script>/gis, '') // Remove script tags
             .replace(/ on\w+="[^"]*"/g, ''); // Remove event handlers like onclick etc.
 
-        return marked.parse(sanitizedMarkdown, { breaks: true, gfm: true }); // Enable breaks and GitHub Flavored Markdown
+        // Configure marked to handle line breaks and GitHub Flavored Markdown
+        return marked.parse(sanitizedMarkdown, { breaks: true, gfm: true });
       } catch (error) {
           console.error("Error converting markdown to HTML:", error);
-          return `<p>Erro ao converter markdown: ${markdown}</p>`; // Fallback
+          // Provide a user-friendly error message within HTML tags for the editor
+          return `<p><strong>Erro ao processar o plano recebido.</strong> Por favor, tente gerar novamente.</p><p><small>Detalhe técnico: ${error instanceof Error ? error.message : String(error)}</small></p>`;
       }
   };
 
@@ -247,7 +238,6 @@ export default function DashboardPage() {
 
     setGeneratingPlan(true);
     setReadingFile(true);
-    // setGeneratedPlan(''); // Clear raw plan if keeping it
     setEditablePlanContent(''); // Clear editor
     setIsPlanGenerated(false);
     setSuggestingContent(false);
@@ -258,7 +248,7 @@ export default function DashboardPage() {
         try { materialDataUri = await readFileAsDataUri(selectedMaterialFile); }
         catch (error) {
             console.error("Error reading material file:", error);
-            toast({ title: "Erro ao Ler Arquivo", description: "Não foi possível ler o arquivo de material.", variant: "destructive" });
+            toast({ title: "Erro ao Ler Arquivo", description: `Não foi possível ler o arquivo de material anexado. Verifique o arquivo e tente novamente. Detalhe: ${error instanceof Error ? error.message : 'Erro desconhecido'}`, variant: "destructive", duration: 7000 });
             setReadingFile(false); setGeneratingPlan(false); return;
         }
     }
@@ -276,11 +266,17 @@ export default function DashboardPage() {
     try {
       console.log("[Dashboard] Sending request to generateLessonPlan with input:", input);
       const response = await generateLessonPlan(input);
+
+      if (!response || !response.lessonPlan) {
+          // Handle cases where the AI might return an empty or invalid response structure
+          throw new Error("A resposta da IA está vazia ou em formato inválido.");
+      }
+
       const htmlContent = markdownToHtml(response.lessonPlan); // Convert AI's markdown to HTML
-      // setGeneratedPlan(response.lessonPlan); // Store raw if needed
       setEditablePlanContent(htmlContent); // Set editor content
       setIsPlanGenerated(true); // Mark plan as generated
       console.log("[Dashboard] Lesson plan generated successfully.");
+      toast({ title: "Plano Gerado", description: "O plano de aula foi gerado. Edite-o abaixo.", variant: "default" });
 
       // Suggest content after successful generation
       handleSuggestContent(input.conteudo, input.anoSerie, input.disciplina, response.lessonPlan);
@@ -288,10 +284,11 @@ export default function DashboardPage() {
     } catch (error: any) {
       console.error("[Dashboard] Error generating lesson plan:", error);
       const errorMessage = error instanceof Error ? error.message : String(error);
-       // Display the specific error message from the flow in the editor and toast
-      setEditablePlanContent(`<p><b>Erro ao gerar o plano de aula:</b> ${errorMessage}</p>`); // Set error in editor
+      // Display the specific error message from the flow/conversion in the editor and toast
+      const errorHtml = `<p><strong>Erro ao gerar o plano de aula:</strong></p><p>${errorMessage}</p><p><small>Verifique os detalhes no console do navegador ou tente novamente.</small></p>`;
+      setEditablePlanContent(errorHtml); // Set error HTML in editor
       setIsPlanGenerated(true); // Mark as generated even if error, to show the error message
-      toast({ title: "Erro na Geração", description: errorMessage, variant: "destructive", duration: 10000 }); // Use the specific error message
+      toast({ title: "Erro na Geração", description: `Falha ao gerar o plano: ${errorMessage}`, variant: "destructive", duration: 10000 }); // Use the specific error message
     } finally {
       setGeneratingPlan(false);
     }
@@ -305,7 +302,7 @@ export default function DashboardPage() {
        setSuggestedContent(response.additionalContentSuggestions);
      } catch (error) {
        console.error("Error suggesting content:", error);
-        toast({ title: "Erro nas Sugestões", description: "Não foi possível buscar sugestões de conteúdo.", variant: "destructive" });
+        toast({ title: "Erro nas Sugestões", description: `Não foi possível buscar sugestões de conteúdo. ${error instanceof Error ? error.message : 'Tente novamente.'}`, variant: "destructive" });
      } finally { setSuggestingContent(false); }
    };
 
@@ -313,7 +310,13 @@ export default function DashboardPage() {
   const handleSavePlan = async () => {
       // Get the current HTML content from the editor state
       if (!user || !editablePlanContent || !selectedLevel || !subject || !yearSeries || !bimestre || !knowledgeObject || selectedContents.length === 0 || selectedSkills.length === 0 || !aulaDuracao) {
-          toast({ title: "Erro ao Salvar", description: "Plano editado ou informações essenciais estão faltando.", variant: "destructive" });
+          toast({ title: "Erro ao Salvar", description: "Não é possível salvar. Verifique se um plano foi gerado e se todas as informações essenciais do formulário estão preenchidas.", variant: "destructive", duration: 7000 });
+          return;
+      }
+
+      // Add a basic check to prevent saving just the error message placeholder
+      if (editablePlanContent.includes("Erro ao gerar o plano de aula:")) {
+          toast({ title: "Erro no Plano", description: "Não é possível salvar um plano que resultou em erro. Por favor, gere um plano válido primeiro.", variant: "destructive" });
           return;
       }
 
@@ -327,7 +330,7 @@ export default function DashboardPage() {
               createdAt: new Date().toISOString(),
           };
           await savePlan(planDetails);
-          toast({ title: "Plano Salvo", description: "Seu plano de aula foi salvo com sucesso!", variant: "default" });
+          toast({ title: "Plano Salvo", description: "Seu plano de aula editado foi salvo com sucesso!", variant: "default" });
       } catch (error) {
           console.error("Error saving lesson plan:", error);
           toast({ title: "Erro ao Salvar", description: `Não foi possível salvar o plano. ${error instanceof Error ? error.message : 'Erro desconhecido.'}`, variant: "destructive" });
@@ -341,7 +344,20 @@ export default function DashboardPage() {
 
 
   if (authLoading || !user) {
-    return <div className="flex min-h-screen items-center justify-center"></div>;
+    // Improved loading state for the whole page
+    return (
+      <div className="flex min-h-screen flex-col bg-secondary">
+         <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6 shadow-sm">
+             <div className="flex items-center gap-4"> <div className="w-10 h-10"></div> <div className="flex items-center gap-2"> <BookOpenCheck className="h-7 w-7 text-primary" /> <h1 className="text-xl font-semibold text-primary">redocêncIA</h1> </div> </div>
+             <div className="flex items-center gap-4"> <Skeleton className="h-5 w-24 hidden sm:inline" /> <Skeleton className="h-8 w-8 rounded-full" /> <Skeleton className="h-8 w-8 rounded-full" /> <Skeleton className="h-8 w-8 rounded-full" /> </div>
+         </header>
+         <main className="flex-1 p-4 md:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+           {/* Re-use loading component structure */}
+           <Card className="shadow-md"> <CardHeader> <Skeleton className="h-7 w-48 mb-1" /> <Skeleton className="h-4 w-64" /> </CardHeader> <CardContent className="space-y-4"> {[...Array(9)].map((_, i) => ( <div key={i} className="space-y-2"> <Skeleton className="h-4 w-1/4" /> <Skeleton className={`h-${i === 5 ? 12 : i === 7 ? 20 : 10} w-full`} /> </div> ))} <Skeleton className="h-10 w-full mt-4" /> </CardContent> </Card>
+           <Card className="shadow-md flex flex-col"> <CardHeader> <Skeleton className="h-7 w-40 mb-1" /> <Skeleton className="h-4 w-56" /> </CardHeader> <CardContent className="flex-1 overflow-hidden"> <div className="space-y-4"> <Skeleton className="h-4 w-3/4" /> <Skeleton className="h-4 w-1/2" /> <Skeleton className="h-20 w-full" /> <Skeleton className="h-4 w-full" /> <Skeleton className="h-4 w-5/6" /> <Skeleton className="h-4 w-full mt-6 pt-4 border-t" /> <Skeleton className="h-4 w-3/4" /> </div> </CardContent> </Card>
+         </main>
+      </div>
+     );
   }
 
    const formDisabled = loadingData || generatingPlan || readingFile || showDataMissingAlert || isSavingPlan;
@@ -381,11 +397,11 @@ export default function DashboardPage() {
             {/* Lesson Duration */}
              <div className="space-y-2"> <Label htmlFor="aulaDuracao" className="flex items-center gap-1"><Clock className="h-4 w-4" /> Duração da Aula *</Label> <Select value={aulaDuracao} onValueChange={handleDurationChange} disabled={formDisabled || selectedSkills.length === 0 || currentAulaDuracaoOptions.length === 0}> <SelectTrigger id="aulaDuracao"> <SelectValue placeholder={ !selectedLevel ? "Selecione nível" : selectedSkills.length === 0 ? "Selecione habilidade(s)" : currentAulaDuracaoOptions.length === 0 ? "Nenhuma duração" : "Selecione a duração" } /> </SelectTrigger> <SelectContent> {currentAulaDuracaoOptions.map(dur => ( <SelectItem key={dur} value={dur}>{dur}</SelectItem> ))} </SelectContent> </Select> {isEnsinoMedioNoturno && <p className="text-xs text-muted-foreground mt-1">Durações para Noturno.</p>} {!isEnsinoMedioNoturno && selectedLevel && <p className="text-xs text-muted-foreground mt-1">Durações padrão.</p>} </div>
             {/* Additional Instructions */}
-            <div className="space-y-2"> <Label htmlFor="additionalInstructions" className="flex items-center gap-1"><MessageSquare className="h-4 w-4" /> Orientações Adicionais</Label> <Textarea id="additionalInstructions" placeholder="Ex: turma com dificuldades, usar recursos..." value={additionalInstructions} onChange={(e) => setAdditionalInstructions(e.target.value)} rows={3} disabled={formDisabled} /> </div>
+            <div className="space-y-2"> <Label htmlFor="additionalInstructions" className="flex items-center gap-1"><MessageSquare className="h-4 w-4" /> Orientações Adicionais</Label> <Textarea id="additionalInstructions" placeholder="Ex: turma com dificuldades, usar recursos específicos, foco em atividade prática..." value={additionalInstructions} onChange={(e) => setAdditionalInstructions(e.target.value)} rows={3} disabled={formDisabled} /> </div>
              {/* File Attachment */}
              <div className="space-y-2"> <Label htmlFor="materialFile" className="flex items-center gap-1"><Paperclip className="h-4 w-4" /> Anexar Material (Opcional)</Label> <Input id="materialFile" type="file" onChange={handleMaterialFileChange} disabled={formDisabled} className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" /> {selectedMaterialFile && ( <p className="text-xs text-muted-foreground mt-1"> Arquivo: {selectedMaterialFile.name} ({(selectedMaterialFile.size / 1024 / 1024).toFixed(2)} MB) {selectedMaterialFile.size > 4 * 1024 * 1024 && <span className="text-destructive ml-2">(Atenção: Arquivos grandes podem falhar)</span>} </p> )} </div>
             {/* Generate Button */}
-            <Button onClick={handleGeneratePlan} disabled={generateButtonDisabled} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"> {readingFile ? 'Lendo...' : generatingPlan ? 'Gerando...' : 'Gerar Plano de Aula'} </Button>
+            <Button onClick={handleGeneratePlan} disabled={generateButtonDisabled} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"> {readingFile ? 'Lendo Anexo...' : generatingPlan ? 'Gerando Plano com IA...' : 'Gerar Plano de Aula'} </Button>
           </CardContent>
         </Card>
 
@@ -396,20 +412,25 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-2"> <Bot className="h-6 w-6 text-primary" /> <CardTitle className="text-xl">Plano Gerado e Editor</CardTitle> </div>
                      <Button variant="outline" size="sm" onClick={handleSavePlan} disabled={saveButtonDisabled}> <Save className="mr-2 h-4 w-4" /> {isSavingPlan ? 'Salvando...' : 'Salvar Plano Editado'} </Button>
                 </div>
-                <CardDescription>Edite o plano gerado pela IA antes de salvar.</CardDescription>
+                <CardDescription>Edite o plano gerado pela IA antes de salvar ou exportar.</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden flex flex-col"> {/* Make content area flex column */}
                  {(generatingPlan || readingFile) ? (
-                    <div className="space-y-4 p-4"> {/* Padding for skeleton */}
-                        <Skeleton className="h-4 w-3/4" />
-                        <Skeleton className="h-4 w-1/2" />
-                        <Skeleton className="h-20 w-full" />
-                        <Skeleton className="h-4 w-full" />
-                        <Skeleton className="h-4 w-5/6" />
+                    <div className="space-y-4 p-4 flex-1 flex flex-col items-center justify-center text-center"> {/* Centered Loading */}
+                         <Bot className="h-12 w-12 text-primary animate-bounce mb-4" />
+                         <p className="text-lg font-semibold text-primary">
+                           {readingFile ? 'Processando anexo...' : 'Gerando seu plano de aula...'}
+                         </p>
+                         <p className="text-sm text-muted-foreground">Isso pode levar alguns segundos.</p>
+                         <Skeleton className="h-4 w-3/4 mt-6" />
+                         <Skeleton className="h-4 w-1/2 mt-2" />
+                         <Skeleton className="h-20 w-full mt-4" />
                     </div>
                 ) : isPlanGenerated ? ( // Show editor only after generation (or error)
                    <>
+                       {/* Editor Component */}
                        <RichTextEditor content={editablePlanContent} onChange={handleEditorChange} />
+
                        {/* Display Suggested Content below the editor */}
                         {suggestingContent ? (
                              <div className="mt-4 space-y-2 border-t pt-3 px-4 pb-2">
@@ -428,19 +449,21 @@ export default function DashboardPage() {
                                     </ul>
                                 </ScrollArea>
                             </div>
-                        ) : !generatingPlan && !readingFile && !suggestingContent ? ( // Show if no suggestions, not loading
+                        ) : !generatingPlan && !readingFile && !suggestingContent && !editablePlanContent.includes("Erro ao gerar") ? ( // Show if no suggestions, not loading, and no error
                              <div className="mt-4 border-t pt-3 px-4 pb-2">
-                                <p className="text-sm text-muted-foreground">Nenhuma sugestão de conteúdo adicional encontrada.</p>
+                                <p className="text-sm text-muted-foreground">Nenhuma sugestão de conteúdo adicional encontrada ou aplicável.</p>
                              </div>
                         ) : null }
                     </>
                 ) : ( // Initial placeholder state
-                    <div className="flex-1 flex items-center justify-center text-center p-4">
+                    <div className="flex-1 flex flex-col items-center justify-center text-center p-4 border rounded-md bg-muted/30">
+                         <Bot className="h-12 w-12 text-muted-foreground mb-4" />
                         <p className="text-muted-foreground">
                             {showDataMissingAlert
-                                ? (user?.username === 'admin' ? "Carregue os dados nas configurações." : "Dados indisponíveis.")
-                                : "Selecione as opções e clique em \"Gerar Plano de Aula\". O resultado aparecerá aqui para edição."}
+                                ? (user?.username === 'admin' ? "Dados do escopo não encontrados. Carregue os arquivos nas configurações." : "Dados necessários não disponíveis. Contate o administrador.")
+                                : "Selecione as opções no formulário ao lado e clique em \"Gerar Plano de Aula\". O resultado gerado pela IA aparecerá aqui para você editar e salvar."}
                          </p>
+                         {loadingData && <p className="text-sm text-primary mt-2">Carregando dados do escopo...</p>}
                      </div>
                 )}
             </CardContent>
@@ -449,3 +472,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    

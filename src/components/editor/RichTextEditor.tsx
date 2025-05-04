@@ -1,4 +1,3 @@
-
 'use client';
 
 import React from 'react';
@@ -25,12 +24,13 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
   }
 
   return (
-    <div className="border border-input bg-transparent rounded-t-md p-1 flex flex-wrap items-center gap-1">
+    <div className="border border-input bg-transparent rounded-t-md p-1 flex flex-wrap items-center gap-1 sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"> {/* Make Toolbar sticky */}
       <Toggle
         size="sm"
         pressed={editor.isActive('bold')}
         onPressedChange={() => editor.chain().focus().toggleBold().run()}
-        aria-label="Bold"
+        disabled={!editor.can().toggleBold()} // Disable if action not possible
+        aria-label="Negrito"
       >
         <Bold className="h-4 w-4" />
       </Toggle>
@@ -38,7 +38,8 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
         size="sm"
         pressed={editor.isActive('italic')}
         onPressedChange={() => editor.chain().focus().toggleItalic().run()}
-        aria-label="Italic"
+         disabled={!editor.can().toggleItalic()}
+        aria-label="Itálico"
       >
         <Italic className="h-4 w-4" />
       </Toggle>
@@ -46,7 +47,8 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
         size="sm"
         pressed={editor.isActive('underline')}
         onPressedChange={() => editor.chain().focus().toggleUnderline().run()}
-        aria-label="Underline"
+         disabled={!editor.can().toggleUnderline()}
+        aria-label="Sublinhado"
       >
         <UnderlineIcon className="h-4 w-4" />
       </Toggle>
@@ -57,7 +59,8 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
         size="sm"
         pressed={editor.isActive('heading', { level: 1 })}
         onPressedChange={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-         aria-label="Heading 1"
+         disabled={!editor.can().toggleHeading({ level: 1 })}
+         aria-label="Título 1"
       >
         <Heading1 className="h-4 w-4" />
       </Toggle>
@@ -65,7 +68,8 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
         size="sm"
         pressed={editor.isActive('heading', { level: 2 })}
         onPressedChange={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-         aria-label="Heading 2"
+         disabled={!editor.can().toggleHeading({ level: 2 })}
+         aria-label="Título 2"
       >
         <Heading2 className="h-4 w-4" />
       </Toggle>
@@ -73,7 +77,8 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
         size="sm"
         pressed={editor.isActive('heading', { level: 3 })}
         onPressedChange={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-         aria-label="Heading 3"
+         disabled={!editor.can().toggleHeading({ level: 3 })}
+         aria-label="Título 3"
       >
         <Heading3 className="h-4 w-4" />
       </Toggle>
@@ -81,7 +86,8 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
         size="sm"
         pressed={editor.isActive('paragraph')}
         onPressedChange={() => editor.chain().focus().setParagraph().run()}
-         aria-label="Paragraph"
+         disabled={!editor.can().setParagraph()}
+         aria-label="Parágrafo"
       >
         <Pilcrow className="h-4 w-4" />
       </Toggle>
@@ -93,7 +99,8 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
         size="sm"
         pressed={editor.isActive('bulletList')}
         onPressedChange={() => editor.chain().focus().toggleBulletList().run()}
-        aria-label="Bullet List"
+         disabled={!editor.can().toggleBulletList()}
+        aria-label="Lista com Marcadores"
       >
         <List className="h-4 w-4" />
       </Toggle>
@@ -101,7 +108,8 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
         size="sm"
         pressed={editor.isActive('orderedList')}
         onPressedChange={() => editor.chain().focus().toggleOrderedList().run()}
-        aria-label="Ordered List"
+         disabled={!editor.can().toggleOrderedList()}
+        aria-label="Lista Numerada"
       >
         <ListOrdered className="h-4 w-4" />
       </Toggle>
@@ -112,7 +120,8 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
         size="sm"
         pressed={editor.isActive({ textAlign: 'left' })}
         onPressedChange={() => editor.chain().focus().setTextAlign('left').run()}
-         aria-label="Align Left"
+         disabled={!editor.can().setTextAlign('left')}
+         aria-label="Alinhar à Esquerda"
       >
         <AlignLeft className="h-4 w-4" />
       </Toggle>
@@ -120,7 +129,8 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
         size="sm"
         pressed={editor.isActive({ textAlign: 'center' })}
         onPressedChange={() => editor.chain().focus().setTextAlign('center').run()}
-         aria-label="Align Center"
+         disabled={!editor.can().setTextAlign('center')}
+         aria-label="Centralizar"
       >
         <AlignCenter className="h-4 w-4" />
       </Toggle>
@@ -128,7 +138,8 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
         size="sm"
         pressed={editor.isActive({ textAlign: 'right' })}
         onPressedChange={() => editor.chain().focus().setTextAlign('right').run()}
-         aria-label="Align Right"
+         disabled={!editor.can().setTextAlign('right')}
+         aria-label="Alinhar à Direita"
       >
         <AlignRight className="h-4 w-4" />
       </Toggle>
@@ -136,11 +147,12 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
         size="sm"
         pressed={editor.isActive({ textAlign: 'justify' })}
         onPressedChange={() => editor.chain().focus().setTextAlign('justify').run()}
-         aria-label="Align Justify"
+         disabled={!editor.can().setTextAlign('justify')}
+         aria-label="Justificar"
       >
         <AlignJustify className="h-4 w-4" />
       </Toggle>
-      {/* Add more toolbar buttons as needed */}
+      {/* Add more toolbar buttons as needed (e.g., font size, color - requires more extensions) */}
     </div>
   );
 };
@@ -152,40 +164,57 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange }) =>
          heading: {
             levels: [1, 2, 3], // Allow H1, H2, H3
           },
-          // Disable blockquote if not needed
+          // Keep default block elements like paragraph, list items, etc.
+          // Disable extensions not explicitly needed if desired
           // blockquote: false,
           // codeBlock: false,
+          // horizontalRule: false,
       }),
       Underline,
       TextAlign.configure({
         types: ['heading', 'paragraph'], // Apply alignment to headings and paragraphs
       }),
     ],
-    content: content, // Initial content
+    content: content, // Initial content passed as prop
     editorProps: {
       attributes: {
-        class: 'prose dark:prose-invert prose-sm sm:prose-base lg:prose-lg xl:prose-2xl focus:outline-none border border-input rounded-b-md p-4 min-h-[300px] max-h-[60vh] overflow-y-auto bg-background',
+        // Apply Tailwind's typography plugin classes for basic styling
+        // and add custom styles for height, border, focus, etc.
+        class: 'prose dark:prose-invert prose-sm sm:prose-base max-w-none focus:outline-none border border-input border-t-0 rounded-b-md p-4 min-h-[400px] max-h-[65vh] overflow-y-auto bg-background',
       },
     },
     onUpdate({ editor }) {
+      // When the editor content changes, call the onChange prop
+      // with the latest HTML content.
       onChange(editor.getHTML());
     },
   });
 
-  // Update editor content when the external `content` prop changes (e.g., after AI generation)
+  // This effect ensures that if the `content` prop changes externally
+  // (e.g., after AI generation), the editor's content is updated.
+  // It avoids unnecessary updates if the content is already the same.
   React.useEffect(() => {
-    if (editor && editor.getHTML() !== content) {
-      editor.commands.setContent(content, false); // `false` prevents firing the update handler again
+    if (editor && !editor.isDestroyed && editor.getHTML() !== content) {
+      // Use `setContent` to replace the editor's content.
+      // The second argument `false` prevents triggering the `onUpdate` handler again,
+      // avoiding potential infinite loops.
+      editor.commands.setContent(content, false);
     }
+     // Add `content` and `editor` to the dependency array.
+     // This effect runs when either `content` or `editor` instance changes.
   }, [content, editor]);
 
 
   return (
-    <div className="flex flex-col flex-1 h-full"> {/* Ensure editor container takes full height */}
+    // Container for the editor and its toolbar
+    <div className="flex flex-col flex-1 h-full border border-input rounded-md">
       <Toolbar editor={editor} />
-      <EditorContent editor={editor} className="flex-1 overflow-hidden" /> {/* Make content scrollable if needed */}
+      {/* EditorContent renders the actual editable area */}
+      <EditorContent editor={editor} className="flex-1 overflow-hidden relative" /> {/* Added relative positioning */}
     </div>
   );
 };
 
 export default RichTextEditor;
+
+    
