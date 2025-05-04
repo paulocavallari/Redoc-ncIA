@@ -44,7 +44,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center bg-secondary p-4 lg:p-8"> {/* Use flex-1 and flex-col */}
+    <div className="flex flex-1 flex-col items-center justify-center bg-secondary p-4 lg:p-8 min-h-0"> {/* Ensure flex item respects parent height */}
        <div className="w-full max-w-md">
          {/* Logo Section */}
          <div className="flex justify-center mb-8">

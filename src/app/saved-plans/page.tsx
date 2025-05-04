@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Save, ArrowLeft, Download, FileText, FileType, Pencil, Trash2 } from 'lucide-react'; // Changed List to Save
+import { Save, ArrowLeft, Download, FileText, FileType, Pencil, Trash2 } from 'lucide-react';
 import { getPlansForUser, deletePlan, type SavedPlan, getPlanById } from '@/services/saved-plans';
 import { useToast } from "@/hooks/use-toast";
 import { format, formatDistanceToNow } from 'date-fns';
@@ -117,7 +117,7 @@ export default function SavedPlansPage() {
 
   if (authLoading || !user) {
     return (
-       <div className="flex flex-1 flex-col items-center justify-center bg-secondary"> {/* Use flex-1 and flex-col */}
+       <div className="flex flex-1 flex-col items-center justify-center bg-secondary min-h-0"> {/* Ensure flex item respects parent height */}
           {/* Keep skeleton for loading state */}
           <div className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-6xl mx-auto"> {/* Added width constraints */}
              <Skeleton className="h-8 w-48 mb-6" /> {/* Title skeleton */}
@@ -153,7 +153,7 @@ export default function SavedPlansPage() {
 
   return (
     <TooltipProvider delayDuration={100}> {/* Wrap with TooltipProvider */}
-    <div className="flex flex-1 flex-col bg-secondary"> {/* Use flex-1 and flex-col */}
+    <div className="flex flex-1 flex-col bg-secondary min-h-0"> {/* Ensure flex item respects parent height */}
 
        {/* Main Content */}
        <main className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-6xl mx-auto"> {/* Added width constraints */}
