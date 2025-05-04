@@ -1,6 +1,6 @@
 
 /**
- * @fileOverview Utility for generating PDF documents from saved lesson plans.
+ * @fileOverview Utility for generating PDF documents from saved lesson plans, parsing basic HTML.
  */
 
 import jsPDF from 'jspdf';
@@ -8,128 +8,234 @@ import type { SavedPlan } from '@/services/saved-plans';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-// Simple text wrapping function
-const wrapText = (doc: jsPDF, text: string, x: number, maxWidth: number): string[] => {
-    if (!text) return [''];
-    return doc.splitTextToSize(text, maxWidth);
+interface PdfContext {
+    doc: jsPDF;
+    y: number;
+    pageHeight: number;
+    pageWidth: number;
+    margin: number;
+    maxWidth: number;
+    listDepth: number;
+    isOrderedList: boolean[]; // Stack to track if current list level is ordered
+}
+
+// Check for page overflow and add a new page if needed
+const checkAndAddPage = (ctx: PdfContext, neededHeight: number): void => {
+    if (ctx.y + neededHeight > ctx.pageHeight - ctx.margin) {
+        ctx.doc.addPage();
+        ctx.y = ctx.margin;
+    }
 };
 
+// Renders a DOM node and its children recursively
+const renderNode = (node: Node, ctx: PdfContext, currentStyle: { bold?: boolean; italic?: boolean } = {}): void => {
+    if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent?.trim();
+        if (text) {
+            checkAndAddPage(ctx, 5); // Estimate height for a line
+
+            // Apply styles
+            let fontStyle = 'normal';
+            if (currentStyle.bold && currentStyle.italic) fontStyle = 'bolditalic';
+            else if (currentStyle.bold) fontStyle = 'bold';
+            else if (currentStyle.italic) fontStyle = 'italic';
+            ctx.doc.setFont(undefined, fontStyle);
+
+            const indent = ctx.listDepth * 5; // Indentation for lists
+            const lines = ctx.doc.splitTextToSize(text, ctx.maxWidth - indent);
+
+            // Handle list bullets/numbers
+            if (ctx.listDepth > 0 && lines.length > 0) {
+                const listPrefix = ctx.isOrderedList[ctx.listDepth - 1] ? `${(node.parentElement as HTMLLIElement & { listCounter?: number }).listCounter}. ` : '• ';
+                 // Basic counter for ordered lists (needs improvement for nested complex lists)
+                 if (ctx.isOrderedList[ctx.listDepth-1]) {
+                    const parent = node.parentElement?.parentElement;
+                    if (parent) {
+                       let counter = 1;
+                       for (let i = 0; i < parent.children.length; i++) {
+                          if (parent.children[i] === node.parentElement) {
+                             (node.parentElement as HTMLLIElement & { listCounter?: number }).listCounter = counter;
+                             break;
+                          }
+                          if (parent.children[i].nodeName === 'LI') counter++;
+                       }
+                    }
+                 }
+                ctx.doc.text(listPrefix, ctx.margin + indent - 5, ctx.y); // Add bullet/number before the first line
+                 lines[0] = lines[0]; // Text starts after bullet
+            }
+
+
+            lines.forEach((line: string) => {
+                checkAndAddPage(ctx, 5);
+                ctx.doc.text(line, ctx.margin + indent, ctx.y);
+                ctx.y += 5; // Line height
+            });
+             // ctx.y += 2; // Small gap after text block? Only if not in list?
+        }
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const element = node as HTMLElement;
+        const tagName = element.tagName.toLowerCase();
+        let newStyle = { ...currentStyle };
+        let blockSpacing = 0;
+        let fontSize = 10; // Default content font size
+
+        switch (tagName) {
+            case 'p':
+                blockSpacing = 4; // Space after paragraph
+                fontSize = 10;
+                break;
+            case 'strong':
+            case 'b':
+                newStyle.bold = true;
+                break;
+            case 'em':
+            case 'i':
+                newStyle.italic = true;
+                break;
+            case 'h1':
+                fontSize = 16; newStyle.bold = true; blockSpacing = 6; break;
+            case 'h2':
+                fontSize = 14; newStyle.bold = true; blockSpacing = 5; break;
+            case 'h3':
+                 fontSize = 12; newStyle.bold = true; blockSpacing = 4; break;
+             case 'h4':
+                 fontSize = 11; newStyle.bold = true; blockSpacing = 3; break;
+            case 'ul':
+            case 'ol':
+                blockSpacing = 2;
+                ctx.listDepth++;
+                ctx.isOrderedList.push(tagName === 'ol');
+                break;
+            case 'li':
+                blockSpacing = 1; // Small space between list items
+                break;
+             case 'br':
+                 checkAndAddPage(ctx, 5);
+                 ctx.y += 5; // Line break
+                 return; // No children to process
+            // Ignore other tags for now or handle them as needed
+        }
+
+         // Apply font size before processing children
+         ctx.doc.setFontSize(fontSize);
+
+         // Add spacing before block elements (except lists/items handled by indent)
+         if (['p', 'h1', 'h2', 'h3', 'h4'].includes(tagName)) {
+             checkAndAddPage(ctx, blockSpacing);
+             ctx.y += blockSpacing;
+         }
+
+
+        // Recursively render children with updated style
+        element.childNodes.forEach(child => renderNode(child, ctx, newStyle));
+
+        // Reset list depth and type after processing list element
+        if (tagName === 'ul' || tagName === 'ol') {
+            ctx.listDepth--;
+            ctx.isOrderedList.pop();
+             // Add spacing after list
+             checkAndAddPage(ctx, blockSpacing);
+             ctx.y += blockSpacing;
+        }
+         // Add spacing after other block elements
+         else if (['p', 'h1', 'h2', 'h3', 'h4', 'li'].includes(tagName)) {
+             checkAndAddPage(ctx, blockSpacing);
+             ctx.y += blockSpacing;
+         }
+
+         // Reset font size after processing block/heading
+         ctx.doc.setFontSize(10); // Reset to default content size
+
+    }
+};
+
+
 export function generatePdf(plan: SavedPlan, filename: string = 'plano_de_aula.pdf'): void {
+    if (typeof window === 'undefined') {
+        console.error("PDF generation can only occur in the browser.");
+        // Handle error appropriately, maybe show a toast
+        throw new Error("PDF generation is client-side only.");
+    }
+
     const doc = new jsPDF();
     const pageHeight = doc.internal.pageSize.height;
     const pageWidth = doc.internal.pageSize.width;
     const margin = 15;
     const maxWidth = pageWidth - margin * 2;
-    let y = margin; // Start position for text
+    let y = margin;
 
-    const addWrappedText = (text: string | string[] | undefined, x: number, currentY: number, options: any = {}): number => {
-        if (!text) return currentY;
-        const lines = Array.isArray(text) ? text : wrapText(doc, text, x, maxWidth);
-        lines.forEach((line, index) => {
-             if (currentY + 5 > pageHeight - margin) { // Check if new page needed
-                doc.addPage();
-                currentY = margin;
-            }
-            doc.text(line, x, currentY, options);
-            currentY += 5; // Move down for next line (adjust spacing as needed)
-        });
-        return currentY + 2; // Add a little extra space after the block
+    const addMetadataLine = (label: string, value: string | undefined): void => {
+        if (!value) return;
+        checkAndAddPage(ctx, 5);
+        doc.setFont(undefined, 'bold');
+        doc.text(`${label}: `, margin, ctx.y);
+        const labelWidth = doc.getTextWidth(`${label}: `);
+        doc.setFont(undefined, 'normal');
+        const valueLines = doc.splitTextToSize(value, maxWidth - labelWidth);
+        doc.text(valueLines, margin + labelWidth, ctx.y);
+        ctx.y += valueLines.length * 5; // Adjust y based on number of lines
+        ctx.y += 1; // Small gap
     };
 
+
+    const ctx: PdfContext = {
+        doc, y, pageHeight, pageWidth, margin, maxWidth, listDepth: 0, isOrderedList: []
+    };
+
+
     // --- Title ---
-    doc.setFontSize(18);
+    doc.setFontSize(16);
     doc.setFont(undefined, 'bold');
-    y = addWrappedText(`Plano de Aula: ${plan.subject} - ${plan.yearSeries}`, margin, y);
-    y += 5; // Space after title
+    checkAndAddPage(ctx, 10);
+    const titleLines = doc.splitTextToSize(`Plano de Aula: ${plan.subject} - ${plan.yearSeries}`, maxWidth);
+    doc.text(titleLines, margin, ctx.y);
+    ctx.y += titleLines.length * 7 + 5; // Adjust spacing based on lines
+    doc.setFontSize(10); // Reset size
+    doc.setFont(undefined, 'normal');
+
 
     // --- Metadata ---
-    doc.setFontSize(10);
-    doc.setFont(undefined, 'normal');
-    y = addWrappedText(`Nível: ${plan.level}`, margin, y);
-    y = addWrappedText(`Bimestre: ${plan.bimestre}º`, margin, y);
-    y = addWrappedText(`Objeto de Conhecimento: ${plan.knowledgeObject}`, margin, y);
-    y = addWrappedText(`Conteúdos: ${plan.contents.join(', ')}`, margin, y);
-    y = addWrappedText(`Habilidades: ${plan.skills.join(', ')}`, margin, y);
-    y = addWrappedText(`Duração: ${plan.duration}`, margin, y);
-    if (plan.additionalInstructions) {
-        y = addWrappedText(`Orientações Adicionais: ${plan.additionalInstructions}`, margin, y);
+    addMetadataLine('Nível', plan.level);
+    addMetadataLine('Bimestre', `${plan.bimestre}º`);
+    addMetadataLine('Objeto de Conhecimento', plan.knowledgeObject);
+    addMetadataLine('Conteúdos', plan.contents.join(', '));
+    addMetadataLine('Habilidades', plan.skills.join(', '));
+    addMetadataLine('Duração', plan.duration);
+    addMetadataLine('Orientações Adicionais', plan.additionalInstructions);
+    addMetadataLine('Salvo em', format(new Date(plan.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }));
+    if (plan.updatedAt) {
+       addMetadataLine('Atualizado em', format(new Date(plan.updatedAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }));
     }
-     y = addWrappedText(`Salvo em: ${format(new Date(plan.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, margin, y);
-    y += 8; // Space before main content
+    ctx.y += 8; // Space before main content
 
-    // --- Generated Plan Content ---
-    doc.setFontSize(12);
-    doc.setFont(undefined, 'normal');
 
-    const planLines = plan.generatedPlan.split('\n');
+    // --- Parse and Render Generated Plan Content ---
+    try {
+        const parser = new DOMParser();
+        const docFragment = parser.parseFromString(plan.generatedPlan, 'text/html'); // Use text/html to get full DOM parsing
+        const bodyElement = docFragment.body; // Process children of the body
 
-    planLines.forEach((line) => {
-        line = line.trim();
-        let isHeader = false;
-        let isSubHeader = false;
-        let isBullet = false;
-        let isNumbered = false;
-        let isTime = false;
+        checkAndAddPage(ctx, 5); // Ensure some space before content starts
 
-        if ((line.startsWith('**') && line.endsWith('**')) || line.startsWith('## ')) {
-            const headerText = line.replace(/^\*\*|^\## |\*\*$/g, '');
-            if (!headerText.endsWith(':') && headerText.length > 0) {
-                line = headerText;
-                isHeader = true;
-            }
-        } else if (line.startsWith('**') && line.endsWith('**:')) {
-             line = line.slice(2, -2) + ':';
-             isSubHeader = true;
-        } else if (line.startsWith('* ') || line.startsWith('- ')) {
-            line = line.slice(2);
-            isBullet = true;
-        } else if (/^\d+\.\s/.test(line)) {
-            line = line.replace(/^\d+\.\s/, '');
-            isNumbered = true; // We'll just treat it as a bullet point for simplicity here
-            isBullet = true; // Treat as bullet point
-        } else if (line.startsWith('(') && line.endsWith(')')) {
-            isTime = true;
-        }
+        // Render the parsed HTML body content
+        bodyElement.childNodes.forEach(node => renderNode(node, ctx));
 
-        if (line) { // Only process non-empty lines
-            if (y + (isHeader ? 10 : 5) > pageHeight - margin) { // Check space before adding
-                doc.addPage();
-                y = margin;
-            }
-
-            if (isHeader) {
-                 y += 4; // Extra space before section header
-                 doc.setFont(undefined, 'bold');
-                 doc.setFontSize(14);
-                 y = addWrappedText(line, margin, y);
-                 doc.setFont(undefined, 'normal');
-                 doc.setFontSize(12);
-                 // Add a line separator
-                 doc.setDrawColor(200); // Light gray
-                 doc.line(margin, y -2 , pageWidth - margin, y - 2);
-                 y += 2;
-            } else if (isSubHeader) {
-                doc.setFont(undefined, 'bold');
-                y = addWrappedText(line, margin, y);
-                doc.setFont(undefined, 'normal');
-            } else if (isBullet) {
-                y = addWrappedText(`• ${line}`, margin + 5, y); // Indent bullets
-            } else if (isTime) {
-                doc.setFont(undefined, 'italic');
-                doc.setFontSize(10);
-                y = addWrappedText(line, margin, y);
-                doc.setFont(undefined, 'normal');
-                doc.setFontSize(12);
-            } else {
-                y = addWrappedText(line, margin, y);
-            }
-        } else {
-            // Add a small space for empty lines if desired
-             if (y + 3 <= pageHeight - margin) {
-                 y += 3;
-             }
-        }
-    });
+    } catch (error) {
+        console.error("Error parsing or rendering HTML for PDF:", error);
+        // Fallback: print raw text if parsing fails
+        checkAndAddPage(ctx, 10);
+        ctx.doc.setFont(undefined, 'italic');
+        ctx.doc.text("[Erro ao processar conteúdo HTML - exibindo texto bruto]", ctx.margin, ctx.y);
+        ctx.y += 5;
+        ctx.doc.setFont(undefined, 'normal');
+        const fallbackLines = ctx.doc.splitTextToSize(plan.generatedPlan.replace(/<[^>]+>/g, ' '), ctx.maxWidth); // Strip HTML tags for fallback
+        fallbackLines.forEach((line: string) => {
+            checkAndAddPage(ctx, 5);
+            ctx.doc.text(line, ctx.margin, ctx.y);
+            ctx.y += 5;
+        });
+    }
 
     // --- Save the PDF ---
     doc.save(filename);
