@@ -1,11 +1,4 @@
-# RedocêncIA 📝🤖
-
-[![Status Build](https://img.shields.io/badge/build-passing-brightgreen?style=flat-square)]([Link para o Status do Build])
-[![Cobertura de Código](https://img.shields.io/badge/coverage-85%25-yellowgreen?style=flat-square)]([Link para Relatório de Cobertura])
-[![Licença](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
-[![Versão](https://img.shields.io/badge/version-1.0.0-blueviolet?style=flat-square)]([Link para Releases])
-
-**RedocêncIA: A Inteligência Artificial a Serviço da Escrita Acadêmica e da Docência.**
+**RedocêncIA: A Inteligência Artificial a Serviço da Docência.**
 
 ## 📄 Descrição
 
