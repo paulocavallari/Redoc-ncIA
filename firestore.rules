@@ -3,10 +3,11 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Users can be created by anyone (for registration), but only the user themselves can read or update their own data.
+    // Allow user creation only for unauthenticated users (registration).
+    // Authenticated users can read, update, or delete their own data.
     // Listing all users is not allowed for clients.
     match /users/{userId} {
-      allow create: if true;
+      allow create: if request.auth == null;
       allow read, update, delete: if request.auth != null && request.auth.uid == userId;
     }
 
