@@ -53,9 +53,8 @@ export interface SavedPlan extends SavedPlanDetails {
 }
 
 // Helper to convert Firestore snapshot to SavedPlan object
-const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData> | DocumentData): SavedPlan => {
+const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): SavedPlan => {
     const data = snapshot.data();
-    const id = 'id' in snapshot ? snapshot.id : '';
 
     const toDateString = (timestamp: any): string | undefined => {
         if (!timestamp) return undefined;
@@ -74,7 +73,7 @@ const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData> | DocumentD
 
 
     return {
-        id: id,
+        id: snapshot.id,
         userId: data.userId,
         level: data.level,
         yearSeries: data.yearSeries,
@@ -158,7 +157,7 @@ export async function getPlanById(userId: string, planId: string): Promise<Saved
  */
 export async function savePlan(planDetails: SavedPlanDetails): Promise<SavedPlan> {
   try {
-    const docRef = await addDoc(collection(db, SAVED_PLANS_COLLECTION), {
+    const docRef = await addDoc(collection(db, SAVED_PLANS_COLlection), {
       ...planDetails,
       createdAt: serverTimestamp(), // Use server timestamp for creation
       updatedAt: null, // No update on creation
