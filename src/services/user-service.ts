@@ -86,18 +86,19 @@ export async function register(name: string, email: string, username: string, pa
     // Check if username or email already exists
     const usernameQuery = query(usersRef, where('username', '==', username));
     const emailQuery = query(usersRef, where('email', '==', email));
-    
-    const [usernameSnapshot, emailSnapshot] = await Promise.all([
-        getDocs(usernameQuery).catch(err => { 
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: usersRef.path, operation: 'list' }));
-            throw err;
-        }),
-        getDocs(emailQuery).catch(err => { 
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: usersRef.path, operation: 'list' }));
-            throw err;
-        })
-    ]);
 
+    // Execute queries and handle potential permission errors
+    const usernameSnapshot = await getDocs(usernameQuery).catch(err => {
+        const permError = new FirestorePermissionError({ path: usersRef.path, operation: 'list', requestResourceData: { query: 'username' } });
+        errorEmitter.emit('permission-error', permError);
+        throw permError; // Throw the contextual error to be caught by the UI
+    });
+
+    const emailSnapshot = await getDocs(emailQuery).catch(err => {
+        const permError = new FirestorePermissionError({ path: usersRef.path, operation: 'list', requestResourceData: { query: 'email' } });
+        errorEmitter.emit('permission-error', permError);
+        throw permError; // Throw the contextual error to be caught by the UI
+    });
 
     if (!usernameSnapshot.empty) {
         console.warn(`Registration failed: Username "${username}" already exists.`);
@@ -118,11 +119,9 @@ export async function register(name: string, email: string, username: string, pa
             requestResourceData: newUser,
         } satisfies SecurityRuleContext);
         errorEmitter.emit('permission-error', permissionError);
-        return null; // Return null to signify failure
+        throw permissionError; // Re-throw the contextual error
     });
     
-    if(!docRef) return null;
-
     console.log(`User "${username}" registered successfully with ID "${docRef.id}".`);
 
     return { id: docRef.id, ...newUser };
@@ -138,7 +137,7 @@ export async function getUserById(userId: string): Promise<User | null> {
             operation: 'get',
         } satisfies SecurityRuleContext);
         errorEmitter.emit('permission-error', permissionError);
-        return null;
+        throw permissionError;
     });
 
     if (userSnap && userSnap.exists()) {
