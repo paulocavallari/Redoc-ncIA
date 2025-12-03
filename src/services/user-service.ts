@@ -1,4 +1,3 @@
-
 /**
  * @fileOverview Service for handling user authentication and data using Firestore.
  */
@@ -83,48 +82,34 @@ export async function login(username: string, pass: string): Promise<User | null
 export async function register(name: string, email: string, username: string, pass: string): Promise<User | null> {
     const usersRef = collection(db, USER_COLLECTION);
 
-    // Check if username or email already exists
-    const usernameQuery = query(usersRef, where('username', '==', username));
-    const emailQuery = query(usersRef, where('email', '==', email));
-
-    // Execute queries and handle potential permission errors
-    const usernameSnapshot = await getDocs(usernameQuery).catch(err => {
-        const permError = new FirestorePermissionError({ path: usersRef.path, operation: 'list', requestResourceData: { query: 'username' } });
-        errorEmitter.emit('permission-error', permError);
-        throw permError; // Throw the contextual error to be caught by the UI
-    });
-
-    const emailSnapshot = await getDocs(emailQuery).catch(err => {
-        const permError = new FirestorePermissionError({ path: usersRef.path, operation: 'list', requestResourceData: { query: 'email' } });
-        errorEmitter.emit('permission-error', permError);
-        throw permError; // Throw the contextual error to be caught by the UI
-    });
-
-    if (!usernameSnapshot.empty) {
-        console.warn(`Registration failed: Username "${username}" already exists.`);
-        return null;
-    }
-    if (!emailSnapshot.empty) {
-        console.warn(`Registration failed: Email "${email}" already exists.`);
-        return null;
-    }
+    // This block is removed as it causes a permission error by trying to query the collection
+    // before the user is authenticated. The check for uniqueness should be handled by
+    // Firestore rules or a backend function if possible. For now, we attempt to create directly.
+    // const usernameQuery = query(usersRef, where('username', '==', username));
+    // const emailQuery = query(usersRef, where('email', '==', email));
+    // const usernameSnapshot = await getDocs(usernameQuery).catch(err => { ... });
+    // const emailSnapshot = await getDocs(emailQuery).catch(err => { ... });
+    // if (!usernameSnapshot.empty || !emailSnapshot.empty) { ... }
 
     const passwordHash = pseudoHash(pass);
     const newUser: Omit<User, 'id'> = { name, email, username, passwordHash };
 
-    const docRef = await addDoc(usersRef, newUser).catch((serverError) => {
+    try {
+        const docRef = await addDoc(usersRef, newUser);
+        console.log(`User "${username}" registered successfully with ID "${docRef.id}".`);
+        return { id: docRef.id, ...newUser };
+    } catch (serverError: any) {
+         // This will now catch the error if the 'create' operation fails.
         const permissionError = new FirestorePermissionError({
             path: usersRef.path,
             operation: 'create',
             requestResourceData: newUser,
         } satisfies SecurityRuleContext);
         errorEmitter.emit('permission-error', permissionError);
-        throw permissionError; // Re-throw the contextual error
-    });
-    
-    console.log(`User "${username}" registered successfully with ID "${docRef.id}".`);
-
-    return { id: docRef.id, ...newUser };
+        // Also log the original error for more context if it's not a permission issue
+        console.error("Original error during user creation:", serverError);
+        return null; // Return null on failure
+    }
 }
 
 
