@@ -15,8 +15,8 @@ import {
   type DocumentData,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
-import { errorEmitter } from '@/firebase/error-emitter'; // Import error emitter
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors'; // Import custom error
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 // In a real app, you'd use a more secure password hashing library like bcrypt
 // This is a simple pseudo-hash for demonstration purposes.
