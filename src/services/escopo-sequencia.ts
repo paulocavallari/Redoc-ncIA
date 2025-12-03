@@ -1,11 +1,10 @@
-
 /**
  * @fileOverview Service for handling Escopo-Sequência data using Firestore.
  * This service is designed to process complex XLSX files with multiple structures
  * and save the structured data into Firestore.
  */
 
-import { db } from '@/lib/firebase';
+import { db } from '@/firebase'; // Corrected import
 import { collection, writeBatch, getDocs, query, where, CollectionReference, doc } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import { errorEmitter } from '@/firebase/error-emitter';

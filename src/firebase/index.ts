@@ -2,8 +2,8 @@
 
 import { firebaseConfig } from '@/firebase/config';
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore'
+import { getAuth, Auth } from 'firebase/auth'; // Import Auth type
+import { getFirestore, Firestore } from 'firebase/firestore'; // Import Firestore type
 
 // IMPORTANT: DO NOT MODIFY THIS FUNCTION
 export function initializeFirebase() {
@@ -39,6 +39,11 @@ export function getSdks(firebaseApp: FirebaseApp) {
     firestore: getFirestore(firebaseApp)
   };
 }
+
+// Export the initialized instances for global use
+const { firestore, auth } = initializeFirebase();
+export { firestore as db, auth };
+
 
 export * from './provider';
 export * from './client-provider';

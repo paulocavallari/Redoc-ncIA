@@ -1,10 +1,9 @@
-
 /**
  * @fileOverview Service for managing saved lesson plans using Firestore.
  */
 'use client';
 
-import { db } from '@/lib/firebase';
+import { db } from '@/firebase'; // Corrected import
 import {
   collection,
   query,

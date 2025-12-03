@@ -3,7 +3,7 @@
  */
 'use client';
 
-import { db } from '@/lib/firebase';
+import { db } from '@/firebase'; // Corrected import
 import {
   collection,
   query,
@@ -86,8 +86,6 @@ export async function register(name: string, email: string, username: string, pa
 
     try {
         // Directly attempt to create the user.
-        // The permission error for "list" is avoided by not querying first.
-        // Any failure in creation will be caught below.
         const docRef = await addDoc(usersRef, newUser);
         console.log(`User "${username}" registered successfully with ID "${docRef.id}".`);
         return { id: docRef.id, ...newUser };
