@@ -4,14 +4,14 @@ import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
 // Your web app's Firebase configuration
-// IMPORTANT: Replace with your actual Firebase config
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyAWhS5v2oMQv5LTvY-p1gQhZeu_JuTMF8M",
+  authDomain: "redocencia-b8305.firebaseapp.com",
+  projectId: "redocencia-b8305",
+  storageBucket: "redocencia-b8305.appspot.com",
+  messagingSenderId: "1008418682365",
+  appId: "1:1008418682365:web:e02a29f98d194252d65594",
+  measurementId: "G-QVSZMFHL1P"
 };
 
 
