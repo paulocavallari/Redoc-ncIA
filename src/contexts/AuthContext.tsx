@@ -2,7 +2,7 @@
 'use client';
 
 import type { User } from '@/services/user-service';
-import { login as apiLogin, register as apiRegister, getUserById, saveUserToStorage, clearUserFromStorage, getUserFromStorage } from '@/services/user-service';
+import { login as apiLogin, register as apiRegister, getUserById, saveUserToStorage, clearUserFromStorage, getUserFromStorage, ensureAdminUserExists } from '@/services/user-service';
 import React, { createContext, useState, useContext, useEffect, useCallback, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -24,6 +24,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
    useEffect(() => {
     // Check for user in localStorage on initial load to maintain session
     const checkUserSession = async () => {
+        // Ensure admin user exists on startup
+        await ensureAdminUserExists();
+
         const storedUser = getUserFromStorage();
         if (storedUser?.id) {
             // Re-validate user with the database

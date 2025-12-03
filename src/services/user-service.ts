@@ -1,3 +1,4 @@
+
 /**
  * @fileOverview Service for handling user authentication and data using Firestore.
  */
@@ -151,5 +152,41 @@ export function getUserFromStorage(): { id: string } | null {
 export function clearUserFromStorage(): void {
     if (typeof window !== 'undefined') {
         window.localStorage.removeItem(USER_STORAGE_KEY);
+    }
+}
+
+/**
+ * Ensures the 'admin' user exists in the database.
+ * If not, it creates the admin user with a default password.
+ */
+export async function ensureAdminUserExists(): Promise<void> {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('username', '==', 'admin'));
+
+    try {
+        const querySnapshot = await getDocs(q);
+        if (querySnapshot.empty) {
+            console.log("Admin user not found, creating one...");
+            const adminUser = {
+                name: 'Admin',
+                email: 'admin@redocencia.com',
+                username: 'admin',
+                passwordHash: pseudoHash('admin'), // Default password 'admin'
+            };
+            await addDoc(usersRef, adminUser);
+            console.log("Admin user created successfully.");
+        } else {
+            console.log("Admin user already exists.");
+        }
+    } catch (error) {
+        console.error("Error ensuring admin user exists:", error);
+        // We don't rethrow here to avoid blocking app startup if Firestore is temporarily down
+        // but we emit a contextual error for debugging.
+        const permissionError = new FirestorePermissionError({
+            path: usersRef.path,
+            operation: 'list', // The initial check is a 'list' operation
+            requestResourceData: { query: 'username == admin' },
+        });
+        errorEmitter.emit('permission-error', permissionError);
     }
 }
