@@ -82,14 +82,16 @@ export async function login(username: string, pass: string): Promise<User | null
 export async function register(name: string, email: string, username: string, pass: string): Promise<User | null> {
     const usersRef = collection(db, USER_COLLECTION);
 
-    // This block is removed as it causes a permission error by trying to query the collection
-    // before the user is authenticated. The check for uniqueness should be handled by
-    // Firestore rules or a backend function if possible. For now, we attempt to create directly.
+    // This check is problematic because unauthenticated users cannot query the 'users' collection.
+    // We will remove it and rely on Firestore rules to enforce uniqueness if needed,
+    // or handle the error on write. The primary issue is the 'list' permission error.
+    
     // const usernameQuery = query(usersRef, where('username', '==', username));
-    // const emailQuery = query(usersRef, where('email', '==', email));
     // const usernameSnapshot = await getDocs(usernameQuery).catch(err => { ... });
-    // const emailSnapshot = await getDocs(emailQuery).catch(err => { ... });
-    // if (!usernameSnapshot.empty || !emailSnapshot.empty) { ... }
+    // if (!usernameSnapshot.empty) {
+    //     console.log(`Registration failed: Username "${username}" already exists.`);
+    //     return null;
+    // }
 
     const passwordHash = pseudoHash(pass);
     const newUser: Omit<User, 'id'> = { name, email, username, passwordHash };
