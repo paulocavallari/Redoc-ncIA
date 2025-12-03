@@ -57,15 +57,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const register = useCallback(async (name: string, email: string, username: string, pass: string): Promise<boolean> => {
     setIsLoading(true);
-    // Remove try-catch to let the contextual error be thrown by the service
-    const registeredUser = await apiRegister(name, email, username, pass);
-    // Returns true if user was created, false if username/email exists or error occurred
-    if (registeredUser) {
+    try {
+        const registeredUser = await apiRegister(name, email, username, pass);
+        if (registeredUser) {
+            setIsLoading(false);
+            return true;
+        }
         setIsLoading(false);
-        return true;
+        return false;
+    } catch (error) {
+        setIsLoading(false);
+        // Re-throw the original error so it can be caught by Next.js error overlay
+        throw error;
     }
-    setIsLoading(false);
-    return false;
   }, []);
 
   const logout = useCallback(() => {

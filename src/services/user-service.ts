@@ -81,18 +81,10 @@ export async function login(username: string, pass: string): Promise<User | null
 
 export async function register(name: string, email: string, username: string, pass: string): Promise<User | null> {
     const usersRef = collection(db, USER_COLLECTION);
-
-    // This check is problematic because unauthenticated users cannot query the 'users' collection.
-    // We will remove it and rely on Firestore rules to enforce uniqueness if needed,
-    // or handle the error on write. The primary issue is the 'list' permission error.
     
-    // const usernameQuery = query(usersRef, where('username', '==', username));
-    // const usernameSnapshot = await getDocs(usernameQuery).catch(err => { ... });
-    // if (!usernameSnapshot.empty) {
-    //     console.log(`Registration failed: Username "${username}" already exists.`);
-    //     return null;
-    // }
-
+    // We will attempt to create the user directly and let the catch block handle permission errors.
+    // This avoids the 'list' permission issue for unauthenticated users.
+    
     const passwordHash = pseudoHash(pass);
     const newUser: Omit<User, 'id'> = { name, email, username, passwordHash };
 
@@ -101,16 +93,14 @@ export async function register(name: string, email: string, username: string, pa
         console.log(`User "${username}" registered successfully with ID "${docRef.id}".`);
         return { id: docRef.id, ...newUser };
     } catch (serverError: any) {
-         // This will now catch the error if the 'create' operation fails.
         const permissionError = new FirestorePermissionError({
             path: usersRef.path,
             operation: 'create',
             requestResourceData: newUser,
         } satisfies SecurityRuleContext);
         errorEmitter.emit('permission-error', permissionError);
-        // Also log the original error for more context if it's not a permission issue
-        console.error("Original error during user creation:", serverError);
-        return null; // Return null on failure
+        // Throw the contextual error to be caught by the UI
+        throw permissionError;
     }
 }
 
