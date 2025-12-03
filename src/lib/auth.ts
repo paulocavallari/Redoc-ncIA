@@ -37,26 +37,19 @@ const initializeUsers = (): Record<string, User> => {
   return defaultUsers;
 };
 
-let users: Record<string, User> = {};
-
-// Ensure users are loaded only on the client-side
-if (typeof window !== 'undefined') {
-  users = initializeUsers();
-}
-
-
 // --- Auth Functions ---
 
 export const login = async (username: string, pass: string): Promise<User | null> => {
   // Simulate API delay
   await new Promise(resolve => setTimeout(resolve, 500));
 
-  if (typeof window !== 'undefined') {
-     users = initializeUsers(); // Ensure users are loaded
+  if (typeof window === 'undefined') {
+    return null; // Cannot log in on the server
   }
 
-
+  const users = initializeUsers(); // Ensure users are loaded on client
   const user = users[username];
+
   if (user && user.passwordHash === pass) { // Simple password check (DO NOT use in production)
     return user;
   }
@@ -67,10 +60,11 @@ export const register = async (name: string, email: string, username: string, pa
   // Simulate API delay
   await new Promise(resolve => setTimeout(resolve, 500));
 
-   if (typeof window !== 'undefined') {
-     users = initializeUsers(); // Ensure users are loaded
-   }
+  if (typeof window === 'undefined') {
+    return null; // Cannot register on the server
+  }
 
+  const users = initializeUsers(); // Ensure users are loaded on client
 
   if (users[username]) {
     console.error('Username already exists');
@@ -87,15 +81,16 @@ export const register = async (name: string, email: string, username: string, pa
 
   users[username] = newUser;
 
-   if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
-   }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
 
   return newUser;
 };
 
 export const logout = (): void => {
   // In a real app, this might involve clearing tokens or session data
+  if (typeof window !== 'undefined') {
+    clearUserFromStorage();
+  }
   console.log('User logged out');
 };
 
