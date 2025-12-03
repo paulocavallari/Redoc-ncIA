@@ -43,20 +43,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const login = useCallback(async (username: string, pass: string): Promise<boolean> => {
     setIsLoading(true);
-    try {
-        const loggedInUser = await apiLogin(username, pass);
-        if (loggedInUser) {
-          setUser(loggedInUser);
-          saveUserToStorage(loggedInUser); // Persist session locally
-          return true;
-        }
-        return false;
-    } catch (error) {
-        console.error("AuthContext Login Error:", error);
-        return false;
-    } finally {
-        setIsLoading(false);
+    // Remove try-catch to let the contextual error be thrown by the service
+    const loggedInUser = await apiLogin(username, pass);
+    if (loggedInUser) {
+      setUser(loggedInUser);
+      saveUserToStorage(loggedInUser); // Persist session locally
+      setIsLoading(false);
+      return true;
     }
+    setIsLoading(false);
+    return false;
   }, []);
 
   const register = useCallback(async (name: string, email: string, username: string, pass: string): Promise<boolean> => {

@@ -16,6 +16,8 @@ import {
   type DocumentData,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter'; // Import error emitter
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors'; // Import custom error
 
 // In a real app, you'd use a more secure password hashing library like bcrypt
 // This is a simple pseudo-hash for demonstration purposes.
@@ -47,78 +49,96 @@ const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): User => {
 };
 
 export async function login(username: string, pass: string): Promise<User | null> {
-    try {
-        const usersRef = collection(db, USER_COLLECTION);
-        const q = query(usersRef, where('username', '==', username));
-        const querySnapshot = await getDocs(q);
+    const usersRef = collection(db, USER_COLLECTION);
+    const q = query(usersRef, where('username', '==', username));
 
-        if (querySnapshot.empty) {
-            console.log(`Login failed: No user found with username "${username}".`);
-            return null;
-        }
+    const querySnapshot = await getDocs(q).catch((serverError) => {
+        const permissionError = new FirestorePermissionError({
+            path: usersRef.path,
+            operation: 'list', // 'list' for collection queries
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+        // Return an empty snapshot to handle the flow gracefully, the error is already emitted
+        return { empty: true, docs: [] };
+    });
 
-        const userDoc = querySnapshot.docs[0];
-        const user = fromFirestore(userDoc);
-        const inputPasswordHash = pseudoHash(pass);
+    if (querySnapshot.empty) {
+        console.log(`Login failed: No user found with username "${username}".`);
+        return null;
+    }
 
-        if (user.passwordHash === inputPasswordHash) {
-            console.log(`Login successful for user "${username}".`);
-            return user;
-        } else {
-            console.log(`Login failed: Incorrect password for user "${username}".`);
-            return null;
-        }
-    } catch (error) {
-        console.error("Error during login:", error);
-        throw new Error("An error occurred during the login process.");
+    const userDoc = querySnapshot.docs[0];
+    const user = fromFirestore(userDoc);
+    const inputPasswordHash = pseudoHash(pass);
+
+    if (user.passwordHash === inputPasswordHash) {
+        console.log(`Login successful for user "${username}".`);
+        return user;
+    } else {
+        console.log(`Login failed: Incorrect password for user "${username}".`);
+        return null;
     }
 }
 
 export async function register(name: string, email: string, username: string, pass: string): Promise<User | null> {
-    try {
-        const usersRef = collection(db, USER_COLLECTION);
+    const usersRef = collection(db, USER_COLLECTION);
 
-        // Check if username or email already exists
-        const usernameQuery = query(usersRef, where('username', '==', username));
-        const emailQuery = query(usersRef, where('email', '==', email));
-        const [usernameSnapshot, emailSnapshot] = await Promise.all([getDocs(usernameQuery), getDocs(emailQuery)]);
+    // Check if username or email already exists
+    const usernameQuery = query(usersRef, where('username', '==', username));
+    const emailQuery = query(usersRef, where('email', '==', email));
+    
+    const [usernameSnapshot, emailSnapshot] = await Promise.all([
+        getDocs(usernameQuery).catch(err => { throw new FirestorePermissionError({ path: usersRef.path, operation: 'list' }) }),
+        getDocs(emailQuery).catch(err => { throw new FirestorePermissionError({ path: usersRef.path, operation: 'list' }) })
+    ]);
 
-        if (!usernameSnapshot.empty) {
-            console.warn(`Registration failed: Username "${username}" already exists.`);
-            return null;
-        }
-        if (!emailSnapshot.empty) {
-            console.warn(`Registration failed: Email "${email}" already exists.`);
-            return null;
-        }
 
-        const passwordHash = pseudoHash(pass);
-        const newUser: Omit<User, 'id'> = { name, email, username, passwordHash };
-
-        const docRef = await addDoc(usersRef, newUser);
-        console.log(`User "${username}" registered successfully with ID "${docRef.id}".`);
-
-        return { id: docRef.id, ...newUser };
-    } catch (error) {
-        console.error("Error during registration:", error);
-        throw new Error("An error occurred during the registration process.");
+    if (!usernameSnapshot.empty) {
+        console.warn(`Registration failed: Username "${username}" already exists.`);
+        return null;
     }
+    if (!emailSnapshot.empty) {
+        console.warn(`Registration failed: Email "${email}" already exists.`);
+        return null;
+    }
+
+    const passwordHash = pseudoHash(pass);
+    const newUser: Omit<User, 'id'> = { name, email, username, passwordHash };
+
+    const docRef = await addDoc(usersRef, newUser).catch((serverError) => {
+        const permissionError = new FirestorePermissionError({
+            path: usersRef.path,
+            operation: 'create',
+            requestResourceData: newUser,
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+        return null; // Return null to signify failure
+    });
+    
+    if(!docRef) return null;
+
+    console.log(`User "${username}" registered successfully with ID "${docRef.id}".`);
+
+    return { id: docRef.id, ...newUser };
 }
 
 
 export async function getUserById(userId: string): Promise<User | null> {
-    try {
-        const userRef = doc(db, USER_COLLECTION, userId);
-        const userSnap = await getDoc(userRef);
+    const userRef = doc(db, USER_COLLECTION, userId);
+    
+    const userSnap = await getDoc(userRef).catch(serverError => {
+        const permissionError = new FirestorePermissionError({
+            path: userRef.path,
+            operation: 'get',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+        return null;
+    });
 
-        if (userSnap.exists()) {
-            return fromFirestore(userSnap as QueryDocumentSnapshot<DocumentData>);
-        } else {
-            console.warn(`User with ID "${userId}" not found.`);
-            return null;
-        }
-    } catch (error) {
-        console.error(`Error fetching user by ID "${userId}":`, error);
+    if (userSnap && userSnap.exists()) {
+        return fromFirestore(userSnap as QueryDocumentSnapshot<DocumentData>);
+    } else {
+        if(userSnap) console.warn(`User with ID "${userId}" not found.`);
         return null;
     }
 }
