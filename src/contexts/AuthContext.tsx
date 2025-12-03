@@ -1,7 +1,8 @@
+
 'use client';
 
-import type { User } from '@/lib/auth';
-import { login as apiLogin, register as apiRegister, logout as apiLogout, getUserFromStorage, saveUserToStorage, clearUserFromStorage } from '@/lib/auth';
+import type { User } from '@/services/user-service';
+import { login as apiLogin, register as apiRegister, getUserById, saveUserToStorage, clearUserFromStorage, getUserFromStorage } from '@/services/user-service';
 import React, { createContext, useState, useContext, useEffect, useCallback, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -17,52 +18,68 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // Start loading until user is checked
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
-    // Check for user in localStorage on initial load
-    const storedUser = getUserFromStorage();
-    if (storedUser) {
-      setUser(storedUser);
-    }
-    setIsLoading(false); // Finished loading
-  }, []);
+   useEffect(() => {
+    // Check for user in localStorage on initial load to maintain session
+    const checkUserSession = async () => {
+        const storedUser = getUserFromStorage();
+        if (storedUser?.id) {
+            // Re-validate user with the database
+            const freshUser = await getUserById(storedUser.id);
+            if (freshUser) {
+                setUser(freshUser);
+            } else {
+                // User doesn't exist in DB anymore, clear local session
+                clearUserFromStorage();
+            }
+        }
+        setIsLoading(false);
+    };
+    checkUserSession();
+   }, []);
+
 
   const login = useCallback(async (username: string, pass: string): Promise<boolean> => {
     setIsLoading(true);
-    const loggedInUser = await apiLogin(username, pass);
-    if (loggedInUser) {
-      setUser(loggedInUser);
-      saveUserToStorage(loggedInUser);
-      setIsLoading(false);
-      return true;
+    try {
+        const loggedInUser = await apiLogin(username, pass);
+        if (loggedInUser) {
+          setUser(loggedInUser);
+          saveUserToStorage(loggedInUser); // Persist session locally
+          return true;
+        }
+        return false;
+    } catch (error) {
+        console.error("AuthContext Login Error:", error);
+        return false;
+    } finally {
+        setIsLoading(false);
     }
-    setIsLoading(false);
-    return false;
   }, []);
 
   const register = useCallback(async (name: string, email: string, username: string, pass: string): Promise<boolean> => {
     setIsLoading(true);
-    const registeredUser = await apiRegister(name, email, username, pass);
-    if (registeredUser) {
-      // Optionally log in the user automatically after registration
-      // setUser(registeredUser);
-      // saveUserToStorage(registeredUser);
-      setIsLoading(false);
-      return true;
+    try {
+        const registeredUser = await apiRegister(name, email, username, pass);
+        // Returns true if user was created, false if username/email exists
+        return !!registeredUser;
+    } catch (error) {
+        console.error("AuthContext Register Error:", error);
+        return false;
+    } finally {
+        setIsLoading(false);
     }
-    setIsLoading(false);
-    return false;
   }, []);
 
   const logout = useCallback(() => {
     setIsLoading(true);
-    apiLogout(); // Simulate logout
     setUser(null);
     clearUserFromStorage();
-    router.push('/login'); // Redirect to login after logout
-    setIsLoading(false);
+    router.push('/login');
+    // A small delay to ensure redirection completes before state changes might affect other components
+    setTimeout(() => setIsLoading(false), 50);
   }, [router]);
 
   return (

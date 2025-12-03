@@ -10,8 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { useToast } from "@/hooks/use-toast";
-import Image from 'next/image'; // Import next/image
-import { UserPlus } from 'lucide-react'; // Import UserPlus icon
+import Image from 'next/image';
+import { UserPlus } from 'lucide-react';
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
@@ -41,7 +41,7 @@ export default function RegisterPage() {
        });
       return;
     }
-     if (password.length < 6) { // Basic password length validation
+     if (password.length < 6) {
         toast({
             title: "Erro de Cadastro",
             description: "A senha deve ter pelo menos 6 caracteres.",
@@ -50,15 +50,14 @@ export default function RegisterPage() {
         return;
      }
 
-
     const success = await register(name, email, username, password);
     if (success) {
        toast({
          title: "Cadastro Realizado",
          description: "Sua conta foi criada com sucesso! Faça o login.",
-         variant: "default", // Use default variant for success
+         variant: "default",
        });
-      router.push('/login'); // Redirect to login page after successful registration
+      router.push('/login');
     } else {
       toast({
         title: "Erro de Cadastro",
@@ -70,31 +69,29 @@ export default function RegisterPage() {
   };
 
   return (
-     <div className="flex flex-1 flex-col items-center justify-center bg-secondary p-4 lg:p-8 min-h-0"> {/* Ensure flex item respects parent height */}
+     <div className="flex flex-1 flex-col items-center justify-center bg-secondary p-4 lg:p-8 min-h-0">
         <div className="w-full max-w-md">
-            {/* Logo Section */}
             <div className="flex justify-center mb-8">
                 <Image
-                    src="https://i.imgur.com/uo4OdVQ.png" // Logo URL
-                    width={231} // Increased width by 70% (136 * 1.7 = 231.2 -> 231)
-                    height={231} // Increased height by 70% (136 * 1.7 = 231.2 -> 231)
+                    src="https://i.imgur.com/uo4OdVQ.png"
+                    width={231}
+                    height={231}
                     alt="Redocência Logo"
                     priority
                  />
             </div>
 
-            {/* Card Section */}
-             <Card className="shadow-xl border-none rounded-lg overflow-hidden bg-card"> {/* Enhanced card styling */}
-                 <CardHeader className="p-6"> {/* Consistent padding */}
+             <Card className="shadow-xl border-none rounded-lg overflow-hidden bg-card">
+                 <CardHeader className="p-6">
                     <CardTitle className="text-2xl font-bold text-center text-card-foreground flex items-center justify-center gap-2">
-                        <UserPlus className="h-6 w-6" /> {/* Add UserPlus Icon */}
+                        <UserPlus className="h-6 w-6" />
                         Criar Nova Conta
                     </CardTitle>
                     <CardDescription className="text-center pt-1 text-muted-foreground">
                         Preencha os campos abaixo para se registrar
                     </CardDescription>
                  </CardHeader>
-                 <CardContent className="p-6 space-y-6"> {/* Consistent padding */}
+                 <CardContent className="p-6 space-y-6">
                   <form onSubmit={handleRegister} className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="name" className="text-card-foreground">Nome Completo</Label>
@@ -106,7 +103,7 @@ export default function RegisterPage() {
                         onChange={(e) => setName(e.target.value)}
                         required
                         disabled={isLoading}
-                        className="text-base bg-background border-border text-foreground" // Ensure text size consistency and colors
+                        className="text-base bg-background border-border text-foreground"
                       />
                     </div>
                     <div className="space-y-2">
@@ -119,7 +116,7 @@ export default function RegisterPage() {
                         onChange={(e) => setEmail(e.target.value)}
                         required
                         disabled={isLoading}
-                        className="text-base bg-background border-border text-foreground" // Ensure text size consistency and colors
+                        className="text-base bg-background border-border text-foreground"
                       />
                     </div>
                     <div className="space-y-2">
@@ -132,7 +129,7 @@ export default function RegisterPage() {
                         onChange={(e) => setUsername(e.target.value)}
                         required
                         disabled={isLoading}
-                        className="text-base bg-background border-border text-foreground" // Ensure text size consistency and colors
+                        className="text-base bg-background border-border text-foreground"
                       />
                     </div>
                     <div className="space-y-2">
@@ -146,7 +143,7 @@ export default function RegisterPage() {
                         required
                         minLength={6}
                         disabled={isLoading}
-                        className="text-base bg-background border-border text-foreground" // Ensure text size consistency and colors
+                        className="text-base bg-background border-border text-foreground"
                       />
                     </div>
                      <div className="space-y-2">
@@ -160,7 +157,7 @@ export default function RegisterPage() {
                         required
                         minLength={6}
                         disabled={isLoading}
-                        className="text-base bg-background border-border text-foreground" // Ensure text size consistency and colors
+                        className="text-base bg-background border-border text-foreground"
                       />
                     </div>
                     <Button type="submit" className="w-full text-base py-3 bg-primary hover:bg-primary/90 text-primary-foreground mt-4" disabled={isLoading}>
@@ -168,7 +165,7 @@ export default function RegisterPage() {
                     </Button>
                   </form>
                  </CardContent>
-                 <CardFooter className="flex justify-center text-sm p-4 bg-card border-t border-border"> {/* Footer background and border */}
+                 <CardFooter className="flex justify-center text-sm p-4 bg-card border-t border-border">
                   <p className="text-muted-foreground">
                     Já tem uma conta?{' '}
                     <Link href="/login" className="text-primary hover:underline font-semibold">

@@ -15,14 +15,14 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Skeleton } from '@/components/ui/skeleton';
 import { Settings, LogOut, BookOpenCheck, GraduationCap, BookCopy, Target, ListChecks, MessageSquare, Bot, Clock, CalendarDays, Layers, Paperclip, AlertTriangle, Library, Save, List, RotateCcw, UploadCloud, Pencil } from 'lucide-react';
 import {
-    getAllEscopoDataFromFirestore, // Updated function name
+    getAllEscopoDataFromFirestore,
     type EscopoSequenciaItem,
     EducationLevel,
     EDUCATION_LEVELS,
 } from '@/services/escopo-sequencia';
 import { generateLessonPlan, type GenerateLessonPlanInput } from '@/ai/flows/generate-lesson-plan';
 import { suggestAdditionalContent, type SuggestAdditionalContentInput } from '@/ai/flows/suggest-additional-content';
-import { savePlan, updatePlan, getPlanById, type SavedPlan } from '@/services/saved-plans';
+import { savePlan, updatePlan, getPlanById, type SavedPlan, type SavedPlanDetails } from '@/services/saved-plans';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from "@/hooks/use-toast";
@@ -108,10 +108,9 @@ export default function DashboardPageContent() {
   }, [toast]);
 
   useEffect(() => {
-    if (user) { // Only load data if user is logged in
+    if (user) { 
         loadData();
     }
-    // Listen for custom event to reload data after upload
     window.addEventListener('escopoDataUpdated', loadData);
     return () => window.removeEventListener('escopoDataUpdated', loadData);
   }, [user, loadData]);
@@ -120,14 +119,11 @@ export default function DashboardPageContent() {
     if (planIdToEdit && user) {
       const loadPlan = async () => {
         setLoadingPlanToEdit(true);
-        setGeneratingPlan(true); // Visually indicates loading
+        setGeneratingPlan(true);
         try {
           const plan = await getPlanById(user.id, planIdToEdit);
           if (plan) {
             setCurrentEditingPlan(plan);
-            // Pre-fill form fields
-            setSelectedLevel(plan.level);
-            // This needs to wait for allEscopoData to be loaded to be effective
           } else {
             toast({ title: "Erro", description: "Plano não encontrado.", variant: "destructive" });
             router.replace('/dashboard');
@@ -147,7 +143,6 @@ export default function DashboardPageContent() {
     }
   }, [planIdToEdit, user, router, toast]);
 
-  // Effect to populate form fields AFTER both plan and escopo data are loaded
   useEffect(() => {
     if (currentEditingPlan && !loadingData && Object.keys(allEscopoData).length > 0) {
         setYearSeries(currentEditingPlan.yearSeries.match(/\d+/)?.[0] || '');
@@ -167,7 +162,7 @@ export default function DashboardPageContent() {
 
   const availableYears = useMemo(() => {
      if (!selectedLevel || !currentLevelData.length) return [];
-     return [...new Set(currentLevelData.map(item => parseInt(item.anoSerie)))].filter(year => !isNaN(year)).sort((a, b) => a - b).map(String);
+     return [...new Set(currentLevelData.map(item => parseInt(item.anoSerie!)))].filter(year => !isNaN(year)).sort((a, b) => a - b).map(String);
    }, [selectedLevel, currentLevelData]);
 
    const availableSubjects = useMemo(() => {
@@ -177,12 +172,12 @@ export default function DashboardPageContent() {
 
     const availableBimestres = useMemo(() => {
      if (!subject || !yearSeries || !currentLevelData.length) return [];
-     return [...new Set(currentLevelData.filter(item => item.anoSerie === yearSeries && item.disciplina === subject).map(item => parseInt(item.bimestre)))].filter(bim => !isNaN(bim)).sort((a, b) => a - b).map(String);
+     return [...new Set(currentLevelData.filter(item => item.anoSerie === yearSeries && item.disciplina === subject).map(item => parseInt(item.bimestre!)))].filter(bim => !isNaN(bim)).sort((a, b) => a - b).map(String);
    }, [subject, yearSeries, currentLevelData]);
 
    const availableKnowledgeObjects = useMemo(() => {
      if (!bimestre || !subject || !yearSeries || !currentLevelData.length) return [];
-     return [...new Set(currentLevelData.filter(item => item.anoSerie === yearSeries && item.disciplina === subject && item.bimestre === bimestre).map(item => item.objetosDoConhecimento))].sort();
+     return [...new Set(currentLevelData.filter(item => item.anoSerie === yearSeries && item.disciplina === subject && item.bimestre === bimestre).map(item => item.objetosDoConhecimento!))].sort();
    }, [bimestre, subject, yearSeries, currentLevelData]);
 
   const availableContents = useMemo(() => {
@@ -339,11 +334,10 @@ export default function DashboardPageContent() {
               userId: user.id, level: selectedLevel, yearSeries: fullYearSeriesString, subject, bimestre,
               knowledgeObject, contents: selectedContents, skills: selectedSkills, duration: aulaDuracao,
               additionalInstructions: additionalInstructions || undefined, generatedPlan: editablePlanContent,
-              createdAt: currentEditingPlan?.createdAt || new Date().toISOString(),
           };
 
           if (currentEditingPlan?.id) {
-              const planToUpdate: SavedPlan = { ...planData, id: currentEditingPlan.id };
+              const planToUpdate: SavedPlan = { ...currentEditingPlan, ...planData };
               await updatePlan(user.id, planToUpdate);
               toast({ title: "Plano Atualizado", description: "Seu plano foi atualizado com sucesso!", variant: "default" });
           } else {

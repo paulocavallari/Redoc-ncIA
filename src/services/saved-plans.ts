@@ -22,12 +22,8 @@ import {
 } from 'firebase/firestore';
 import type { EducationLevel } from './escopo-sequencia';
 
-// Firestore collection name
 const SAVED_PLANS_COLLECTION = 'savedPlans';
 
-/**
- * Interface for the details included when creating a plan.
- */
 export interface SavedPlanDetails {
   userId: string;
   level: EducationLevel | '';
@@ -39,41 +35,35 @@ export interface SavedPlanDetails {
   skills: string[];
   duration: string;
   additionalInstructions?: string;
-  generatedPlan: string; // Store as HTML
-  createdAt: string; // Storing as ISO string
+  generatedPlan: string;
 }
 
-/**
- * Interface for a saved plan document stored in Firestore.
- */
 export interface SavedPlan extends SavedPlanDetails {
-  id: string; // Firestore document ID
-  createdAt: string; // ISO string
-  updatedAt?: string; // Optional: ISO string for last update
+  id: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
-// Helper to convert Firestore snapshot to SavedPlan object
-const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): SavedPlan => {
+const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData> | DocumentData): SavedPlan => {
     const data = snapshot.data();
+    const id = 'id' in snapshot ? snapshot.id : '';
 
     const toDateString = (timestamp: any): string | undefined => {
         if (!timestamp) return undefined;
-        // Handle both Firebase Timestamps and existing ISO strings
         if (typeof timestamp.toDate === 'function') {
             return timestamp.toDate().toISOString();
         }
         if (typeof timestamp === 'string') {
-            return timestamp; // Already a string
+            return timestamp;
         }
         if (timestamp instanceof Date) {
             return timestamp.toISOString();
         }
-        return new Date().toISOString(); // Fallback
+        return new Date().toISOString();
     };
 
-
     return {
-        id: snapshot.id,
+        id,
         userId: data.userId,
         level: data.level,
         yearSeries: data.yearSeries,
@@ -90,18 +80,8 @@ const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): SavedPlan
     };
 };
 
-/**
- * Retrieves all saved plans for a specific user from Firestore.
- * Sorts plans by creation date (newest first).
- *
- * @param userId - The ID of the user whose plans to retrieve.
- * @returns A promise that resolves to an array of SavedPlan objects.
- */
 export async function getPlansForUser(userId: string): Promise<SavedPlan[]> {
-  if (!userId) {
-    console.warn("User ID is required to fetch plans.");
-    return [];
-  }
+  if (!userId) return [];
   try {
     const plansRef = collection(db, SAVED_PLANS_COLLECTION);
     const q = query(
@@ -110,20 +90,13 @@ export async function getPlansForUser(userId: string): Promise<SavedPlan[]> {
       orderBy('createdAt', 'desc')
     );
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(fromFirestore);
+    return querySnapshot.docs.map(doc => fromFirestore(doc as QueryDocumentSnapshot<DocumentData>));
   } catch (error) {
     console.error(`Error fetching plans for user "${userId}":`, error);
     throw new Error(`Failed to fetch plans: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-/**
- * Retrieves a single saved plan by its ID for a specific user.
- *
- * @param userId - The ID of the user who owns the plan.
- * @param planId - The ID of the plan to retrieve.
- * @returns A promise that resolves to the SavedPlan object or null if not found or not owned by user.
- */
 export async function getPlanById(userId: string, planId: string): Promise<SavedPlan | null> {
   try {
     const planRef = doc(db, SAVED_PLANS_COLLECTION, planId);
@@ -131,7 +104,6 @@ export async function getPlanById(userId: string, planId: string): Promise<Saved
 
     if (planSnap.exists()) {
        const planData = fromFirestore(planSnap as QueryDocumentSnapshot<DocumentData>);
-       // Security check: ensure the user owns this plan
        if (planData.userId === userId) {
             return planData;
        } else {
@@ -148,29 +120,19 @@ export async function getPlanById(userId: string, planId: string): Promise<Saved
   }
 }
 
-/**
- * Saves a new lesson plan to Firestore for a specific user.
- *
- * @param planDetails - The details of the plan to save.
- * @returns A promise that resolves to the newly saved plan with its ID.
- * @throws Error if saving fails.
- */
 export async function savePlan(planDetails: SavedPlanDetails): Promise<SavedPlan> {
   try {
-    const docRef = await addDoc(collection(db, SAVED_PLANS_COLlection), {
+    const docData = {
       ...planDetails,
-      createdAt: serverTimestamp(), // Use server timestamp for creation
-      updatedAt: null, // No update on creation
-    });
+      createdAt: serverTimestamp(),
+      updatedAt: null,
+    };
+    const docRef = await addDoc(collection(db, SAVED_PLANS_COLLECTION), docData);
 
     console.log(`Saved plan with ID "${docRef.id}" for user "${planDetails.userId}".`);
 
-    // To return the full object, we fetch it back
-    const newPlan = await getPlanById(planDetails.userId, docRef.id);
-    if (!newPlan) {
-        throw new Error("Failed to retrieve the newly saved plan.");
-    }
-    return newPlan;
+    const newPlanDoc = await getDoc(docRef);
+    return fromFirestore(newPlanDoc as DocumentData);
 
   } catch (error) {
     console.error(`Error saving plan for user "${planDetails.userId}":`, error);
@@ -178,28 +140,22 @@ export async function savePlan(planDetails: SavedPlanDetails): Promise<SavedPlan
   }
 }
 
-/**
- * Updates an existing saved lesson plan in Firestore.
- *
- * @param userId - The ID of the user performing the update.
- * @param planToUpdate - The complete plan object with the ID.
- * @returns A promise that resolves when the plan is updated.
- * @throws Error if updating fails.
- */
 export async function updatePlan(userId: string, planToUpdate: SavedPlan): Promise<void> {
   try {
     const planRef = doc(db, SAVED_PLANS_COLLECTION, planToUpdate.id);
     
-    // Security check: ensure the user owns this plan before updating
     const currentPlan = await getPlanById(userId, planToUpdate.id);
     if (!currentPlan) {
         throw new Error("Plan not found or you don't have permission to update it.");
     }
 
-    await updateDoc(planRef, {
-      ...planToUpdate,
-      updatedAt: serverTimestamp(), // Update the timestamp
-    });
+    const updateData = {
+        ...planToUpdate,
+        updatedAt: serverTimestamp(),
+    };
+    delete (updateData as any).id; // Do not save the id inside the document
+
+    await updateDoc(planRef, updateData);
     console.log(`Updated plan with ID "${planToUpdate.id}".`);
   } catch (error) {
     console.error(`Error updating plan with ID "${planToUpdate.id}":`, error);
@@ -207,19 +163,10 @@ export async function updatePlan(userId: string, planToUpdate: SavedPlan): Promi
   }
 }
 
-/**
- * Deletes a specific saved plan from Firestore.
- *
- * @param userId - The ID of the user performing the deletion.
- * @param planId - The ID of the plan to delete.
- * @returns A promise that resolves when the plan is deleted.
- * @throws Error if deletion fails.
- */
 export async function deletePlan(userId: string, planId: string): Promise<void> {
   try {
     const planRef = doc(db, SAVED_PLANS_COLLECTION, planId);
 
-    // Security check: ensure the user owns this plan before deleting
     const currentPlan = await getPlanById(userId, planId);
     if (!currentPlan) {
         throw new Error("Plan not found or you don't have permission to delete it.");

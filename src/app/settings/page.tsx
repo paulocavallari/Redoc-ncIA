@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { useToast } from "@/hooks/use-toast";
 import { Upload, KeyRound, AlertTriangle, GraduationCap } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -26,6 +27,7 @@ export default function SettingsPage() {
   const [selectedLevel, setSelectedLevel] = useState<EducationLevel | ''>('');
   const [isUploading, setIsUploading] = useState(false);
   const [isSavingKey, setIsSavingKey] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
     if (!authLoading && (!user || user.username !== 'admin')) {
@@ -45,6 +47,7 @@ export default function SettingsPage() {
       const file = event.target.files[0];
       if (file.name.endsWith('.xlsx')) {
          setSelectedFile(file);
+         setUploadProgress(0);
       } else {
           toast({
               title: "Arquivo Inválido",
@@ -78,31 +81,34 @@ export default function SettingsPage() {
     }
 
     setIsUploading(true);
+    setUploadProgress(0);
     try {
         const fileData = await selectedFile.arrayBuffer();
-        console.log(`Processing file: ${selectedFile.name} for level: ${selectedLevel}`);
+        setUploadProgress(20); // Progress after file read
 
-        // This part runs on the client to parse the file
+        console.log(`Processing file: ${selectedFile.name} for level: ${selectedLevel}`);
         const processedData: EscopoSequenciaItem[] = processEscopoFile(fileData, selectedLevel);
+        setUploadProgress(50); // Progress after file processing
 
         if (processedData.length > 0) {
-            // This part saves the parsed data to Firestore
-            await saveEscopoDataToFirestore(selectedLevel, processedData);
+            await saveEscopoDataToFirestore(selectedLevel, processedData, (progress) => {
+                setUploadProgress(50 + (progress / 2)); // Map firestore progress (0-100) to 50-100 range
+            });
             toast({
                 title: "Upload Concluído",
-                description: `Dados do arquivo "${selectedFile.name}" para ${selectedLevel} foram salvos no Firestore. ${processedData.length} itens carregados.`,
+                description: `Dados para ${selectedLevel} foram salvos com sucesso. ${processedData.length} itens carregados.`,
             });
-             // The service dispatches an event to notify the app
         } else {
              toast({
                 title: "Processamento Concluído Sem Dados",
-                description: `Nenhum dado válido encontrado no arquivo "${selectedFile.name}". Verifique o formato e as colunas do arquivo.`,
+                description: `Nenhum dado válido encontrado no arquivo. Verifique o formato e as colunas.`,
                 variant: "destructive",
                 duration: 10000,
             });
         }
 
         setSelectedFile(null);
+        setSelectedLevel('');
         const fileInput = document.getElementById('escopoFile') as HTMLInputElement;
         if (fileInput) fileInput.value = '';
 
@@ -110,12 +116,13 @@ export default function SettingsPage() {
         console.error("Error processing and uploading file:", error);
         toast({
           title: "Erro no Upload",
-          description: `Falha ao processar ou salvar o arquivo. Verifique o console para detalhes. Erro: ${error instanceof Error ? error.message : String(error)}`,
+          description: `Falha ao processar ou salvar o arquivo. Erro: ${error instanceof Error ? error.message : String(error)}`,
           variant: "destructive",
           duration: 10000,
         });
     } finally {
       setIsUploading(false);
+      setTimeout(() => setUploadProgress(0), 2000);
     }
   };
 
@@ -161,7 +168,7 @@ export default function SettingsPage() {
                 Upload do Escopo-Sequência
               </CardTitle>
               <CardDescription>
-                Selecione o <strong>Nível de Ensino</strong> e faça o upload do arquivo <strong>.xlsx</strong> correspondente. Isso substituirá os dados existentes para o nível selecionado no banco de dados (Firestore).
+                Selecione o <strong>Nível de Ensino</strong> e faça o upload do arquivo <strong>.xlsx</strong>. Isso substituirá os dados existentes para o nível selecionado no banco de dados.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -196,6 +203,13 @@ export default function SettingsPage() {
                 />
                  {selectedFile && <p className="text-sm text-muted-foreground mt-1">Arquivo selecionado: {selectedFile.name}</p>}
               </div>
+              {isUploading && (
+                <div className="space-y-2">
+                  <Label>Progresso do Upload</Label>
+                  <Progress value={uploadProgress} className="w-full" />
+                  <p className="text-sm text-muted-foreground text-center">{Math.round(uploadProgress)}%</p>
+                </div>
+              )}
               <Button
                 onClick={handleUpload}
                 disabled={!selectedFile || !selectedLevel || isUploading}
