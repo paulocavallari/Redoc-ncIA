@@ -15,7 +15,7 @@ class EventEmitter<TEventMap extends Record<string, any>> {
   }
 
   off<K extends keyof TEventMap>(event: K, listener: Listener<TEventMap[K]>): void {
-    if (!this(event)) {
+    if (!this.listeners[event]) {
       return;
     }
     this.listeners[event] = this.listeners[event]!.filter(l => l !== listener);

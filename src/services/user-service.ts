@@ -88,8 +88,14 @@ export async function register(name: string, email: string, username: string, pa
     const emailQuery = query(usersRef, where('email', '==', email));
     
     const [usernameSnapshot, emailSnapshot] = await Promise.all([
-        getDocs(usernameQuery).catch(err => { throw new FirestorePermissionError({ path: usersRef.path, operation: 'list' }) }),
-        getDocs(emailQuery).catch(err => { throw new FirestorePermissionError({ path: usersRef.path, operation: 'list' }) })
+        getDocs(usernameQuery).catch(err => { 
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: usersRef.path, operation: 'list' }));
+            throw err;
+        }),
+        getDocs(emailQuery).catch(err => { 
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: usersRef.path, operation: 'list' }));
+            throw err;
+        })
     ]);
 
 

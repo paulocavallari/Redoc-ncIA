@@ -57,16 +57,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const register = useCallback(async (name: string, email: string, username: string, pass: string): Promise<boolean> => {
     setIsLoading(true);
-    try {
-        const registeredUser = await apiRegister(name, email, username, pass);
-        // Returns true if user was created, false if username/email exists
-        return !!registeredUser;
-    } catch (error) {
-        console.error("AuthContext Register Error:", error);
-        return false;
-    } finally {
+    // Remove try-catch to let the contextual error be thrown by the service
+    const registeredUser = await apiRegister(name, email, username, pass);
+    // Returns true if user was created, false if username/email exists or error occurred
+    if (registeredUser) {
         setIsLoading(false);
+        return true;
     }
+    setIsLoading(false);
+    return false;
   }, []);
 
   const logout = useCallback(() => {
