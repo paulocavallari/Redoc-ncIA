@@ -21,17 +21,32 @@ export type EducationLevel = typeof EDUCATION_LEVELS[number];
 
 /**
  * Represents the data structure for a single row item stored in Firestore.
+ * Now includes more optional fields based on the detailed file structure.
  */
 export interface EscopoSequenciaItem {
+  level: EducationLevel;
   disciplina: string;
   anoSerie: string;
   bimestre: string;
   habilidade: string;
   objetosDoConhecimento: string;
   conteudo: string;
+  // --- Optional Fields ---
   objetivos?: string;
-  level: EducationLevel; // Added level to each item for easier querying
+  ciclo?: string;
+  aula?: string;
+  unidadeTematica?: string;
+  titulo?: string;
+  praticasDeLinguagem?: string;
+  campoDeAtuacao?: string;
+  topicoGramatical?: string;
+  semana?: string;
+  data?: string;
+  aulaUnidade?: string;
+  aulaSala?: string;
+  generosDasProducoesBimestrais?: string;
 }
+
 
 // Collection reference in Firestore
 const ESCOPO_COLLECTION = 'escopo-sequencia';
@@ -43,16 +58,30 @@ const extractNumber = (value: any): string => {
     return match ? match[0] : '';
 };
 
-const POSSIBLE_HEADERS: { [key in keyof Omit<EscopoSequenciaItem, 'level'>]?: string[] } = {
+// Expanded possible headers to match the new detailed structure.
+const POSSIBLE_HEADERS: { [key in keyof Omit<EscopoSequenciaItem, 'level' | 'disciplina'>]?: string[] } = {
+    ciclo: ['CICLO', 'Ciclo'],
     anoSerie: ['ANO/SÉRIE', 'Ano/Série', 'Ano', 'Série'],
     bimestre: ['BIMESTRE', 'Bimestre'],
+    aula: ['AULA', 'Aula'],
+    unidadeTematica: ['UNIDADE TEMÁTICA', 'Unidade Temática'],
     habilidade: ['HABILIDADE', 'Habilidade', 'Habilidades', 'HABILIDADES'],
     objetosDoConhecimento: ['OBJETOS DO CONHECIMENTO', 'Objetos do Conhecimento', 'Objeto do Conhecimento', 'Objetos de Conhecimento', 'Objetos de conhecimento'],
+    titulo: ['TÍTULO', 'Título', 'Título da Aula'],
     conteudo: ['CONTEUDO', 'Conteúdo', 'Conteudos', 'Conteúdos'],
     objetivos: ['OBJETIVOS', 'Objetivos', 'Objetivo'],
+    praticasDeLinguagem: ['Práticas de Linguagem'],
+    campoDeAtuacao: ['Campo de Atuação'],
+    topicoGramatical: ['Tópico Gramatical'],
+    semana: ['Semana'],
+    data: ['Data'],
+    aulaUnidade: ['Aula Unidade'],
+    aulaSala: ['Aula Sala'],
+    generosDasProducoesBimestrais: ['Gêneros das Produções Bimestrais'],
 };
 
-const MANDATORY_KEYS: (keyof Omit<EscopoSequenciaItem, 'level' | 'disciplina' | 'objetivos'>)[] = ['anoSerie', 'bimestre', 'habilidade', 'objetosDoConhecimento', 'conteudo'];
+// Core keys that must be present for a row to be considered valid.
+const MANDATORY_KEYS: (keyof EscopoSequenciaItem)[] = ['anoSerie', 'bimestre', 'habilidade', 'objetosDoConhecimento', 'conteudo'];
 
 function findHeader(headers: string[], possibleNames: string[] | undefined): string | undefined {
   if (!possibleNames) return undefined;
@@ -129,14 +158,12 @@ export function processEscopoFile(fileData: ArrayBuffer, level: EducationLevel):
   const workbook = XLSX.read(fileData, { type: 'buffer' });
   const allData: EscopoSequenciaItem[] = [];
 
+  // Anos Iniciais has a different starting point for headers
   const headerSearchStartRowIndex = level === 'Anos Iniciais' ? 1 : 0;
 
   workbook.SheetNames.forEach((sheetName) => {
     const trimmedSheetName = sheetName.trim();
-    if (trimmedSheetName.toLowerCase() === 'índice' || trimmedSheetName.toLowerCase().includes('capa')) {
-      return;
-    }
-    if (trimmedSheetName.toLowerCase() === 'projeto de convivência') {
+    if (['índice', 'capa', 'projeto de convivência'].includes(trimmedSheetName.toLowerCase())) {
         console.log(`Skipping non-curricular sheet: "${sheetName}"`);
         return;
     }
@@ -164,28 +191,33 @@ export function processEscopoFile(fileData: ArrayBuffer, level: EducationLevel):
         continue;
       }
 
-      const item: Partial<EscopoSequenciaItem> = { disciplina: trimmedSheetName, level };
+      // Initialize with mandatory properties
+      const item: Partial<EscopoSequenciaItem> = { 
+          disciplina: trimmedSheetName, 
+          level 
+      };
 
+      // Populate all found fields from the header map
       Object.entries(headerMap).forEach(([key, headerName]) => {
         if (headerName) {
             const colIndex = headers.indexOf(headerName);
             let cellValue: any = (colIndex !== -1 && colIndex < row.length) ? row[colIndex] : null;
-
+            
             const itemKey = key as keyof EscopoSequenciaItem;
-            if (itemKey === 'anoSerie' || itemKey === 'bimestre') {
-                item[itemKey] = extractNumber(cellValue);
-            } else if (cellValue !== null && cellValue !== undefined) {
-                item[itemKey] = String(cellValue).trim();
-            } else {
-                if (MANDATORY_KEYS.includes(itemKey as any)) {
-                    item[itemKey] = '';
+
+            if (cellValue !== null && cellValue !== undefined) {
+                 if (itemKey === 'anoSerie' || itemKey === 'bimestre' || itemKey === 'aula' || itemKey === 'semana') {
+                    item[itemKey] = extractNumber(cellValue);
+                } else {
+                    item[itemKey] = String(cellValue).trim();
                 }
             }
         }
       });
 
+      // Validate if the row has the essential data after processing
       const hasEssentialData = MANDATORY_KEYS.every(key => {
-          const value = item[key as keyof EscopoSequenciaItem];
+          const value = item[key];
           return value !== undefined && value !== null && String(value).trim() !== '';
       });
 
@@ -226,7 +258,7 @@ export async function saveEscopoDataToFirestore(level: EducationLevel, data: Esc
     
     let addBatch = writeBatch(db);
     data.forEach((item, index) => {
-        const docRef = doc(collection(db, ESCOPO_COLLECTION)); // Auto-generate ID (FIXED)
+        const docRef = doc(collection(db, ESCOPO_COLLECTION)); // Auto-generate ID
         addBatch.set(docRef, item);
         if ((index + 1) % 500 === 0) { // Firestore batch limit is 500
             addBatch.commit();
