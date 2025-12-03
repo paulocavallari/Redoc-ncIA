@@ -3,26 +3,23 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Allow user creation. This is less restrictive but resolves emulator/config issues.
-    // The app logic should prevent logged-in users from accessing the register page.
+    // Allow read/write for authenticated users on their own documents.
+    // Allow anyone to create a user document (for registration).
     match /users/{userId} {
-      allow create: if true;
       allow read, update, delete: if request.auth != null && request.auth.uid == userId;
-    }
-
-    // Admins can manage the escopo-sequencia data. Authenticated users can read it.
-    match /escopo-sequencia/{docId} {
-      function isAdmin() {
-        return request.auth != null && request.auth.token.username == 'admin';
-      }
-      allow read: if request.auth != null;
-      allow write: if isAdmin();
+      allow create: if true; 
     }
 
     // Users can manage their own saved plans.
     match /savedPlans/{planId} {
       allow read, write, delete: if request.auth != null && request.auth.uid == request.resource.data.userId;
       allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+
+    // Authenticated users can read escopo-sequencia, admins can write.
+    match /escopo-sequencia/{docId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.token.username == 'admin';
     }
   }
 }
