@@ -81,25 +81,25 @@ export async function login(username: string, pass: string): Promise<User | null
 
 export async function register(name: string, email: string, username: string, pass: string): Promise<User | null> {
     const usersRef = collection(db, USER_COLLECTION);
-    
-    // We will attempt to create the user directly and let the catch block handle permission errors.
-    // This avoids the 'list' permission issue for unauthenticated users.
-    
     const passwordHash = pseudoHash(pass);
     const newUser: Omit<User, 'id'> = { name, email, username, passwordHash };
 
     try {
+        // Directly attempt to create the user.
+        // The permission error for "list" is avoided by not querying first.
+        // Any failure in creation will be caught below.
         const docRef = await addDoc(usersRef, newUser);
         console.log(`User "${username}" registered successfully with ID "${docRef.id}".`);
         return { id: docRef.id, ...newUser };
     } catch (serverError: any) {
+        // If the addDoc operation fails due to security rules, create and emit a contextual error.
         const permissionError = new FirestorePermissionError({
             path: usersRef.path,
             operation: 'create',
             requestResourceData: newUser,
         } satisfies SecurityRuleContext);
         errorEmitter.emit('permission-error', permissionError);
-        // Throw the contextual error to be caught by the UI
+        // Throw the contextual error to be caught by the UI and displayed in the dev overlay.
         throw permissionError;
     }
 }
