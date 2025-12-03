@@ -21,6 +21,9 @@ import {
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import type { EducationLevel } from './escopo-sequencia';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
+
 
 const SAVED_PLANS_COLLECTION = 'savedPlans';
 
@@ -82,100 +85,107 @@ const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData> | DocumentD
 
 export async function getPlansForUser(userId: string): Promise<SavedPlan[]> {
   if (!userId) return [];
-  try {
-    const plansRef = collection(db, SAVED_PLANS_COLLECTION);
-    const q = query(
-      plansRef,
-      where('userId', '==', userId),
-      orderBy('createdAt', 'desc')
-    );
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => fromFirestore(doc as QueryDocumentSnapshot<DocumentData>));
-  } catch (error) {
-    console.error(`Error fetching plans for user "${userId}":`, error);
-    throw new Error(`Failed to fetch plans: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  
+  const plansRef = collection(db, SAVED_PLANS_COLLECTION);
+  const q = query(
+    plansRef,
+    where('userId', '==', userId),
+    orderBy('createdAt', 'desc')
+  );
+
+  const querySnapshot = await getDocs(q).catch(serverError => {
+      const permissionError = new FirestorePermissionError({
+          path: plansRef.path,
+          operation: 'list',
+      });
+      errorEmitter.emit('permission-error', permissionError);
+      throw permissionError;
+  });
+
+  return querySnapshot.docs.map(doc => fromFirestore(doc as QueryDocumentSnapshot<DocumentData>));
 }
 
 export async function getPlanById(userId: string, planId: string): Promise<SavedPlan | null> {
-  try {
-    const planRef = doc(db, SAVED_PLANS_COLLECTION, planId);
-    const planSnap = await getDoc(planRef);
+  const planRef = doc(db, SAVED_PLANS_COLLECTION, planId);
+  const planSnap = await getDoc(planRef).catch(serverError => {
+      const permissionError = new FirestorePermissionError({
+          path: planRef.path,
+          operation: 'get',
+      });
+      errorEmitter.emit('permission-error', permissionError);
+      throw permissionError;
+  });
 
-    if (planSnap.exists()) {
-       const planData = fromFirestore(planSnap as QueryDocumentSnapshot<DocumentData>);
-       if (planData.userId === userId) {
-            return planData;
-       } else {
-           console.warn(`User "${userId}" does not have permission to access plan "${planId}".`);
-           return null;
-       }
-    } else {
-      console.warn(`Plan with ID "${planId}" not found.`);
-      return null;
-    }
-  } catch (error) {
-    console.error(`Error fetching plan by ID "${planId}":`, error);
-    throw new Error(`Failed to fetch plan: ${error instanceof Error ? error.message : String(error)}`);
+  if (planSnap.exists()) {
+      const planData = fromFirestore(planSnap as QueryDocumentSnapshot<DocumentData>);
+      if (planData.userId === userId) {
+          return planData;
+      } else {
+          console.warn(`User "${userId}" does not have permission to access plan "${planId}".`);
+          // This case should ideally be caught by security rules, but we check here as a safeguard.
+          return null;
+      }
+  } else {
+    console.warn(`Plan with ID "${planId}" not found.`);
+    return null;
   }
 }
 
 export async function savePlan(planDetails: SavedPlanDetails): Promise<SavedPlan> {
-  try {
-    const docData = {
-      ...planDetails,
-      createdAt: serverTimestamp(),
-      updatedAt: null,
-    };
-    const docRef = await addDoc(collection(db, SAVED_PLANS_COLLECTION), docData);
+  const docData = {
+    ...planDetails,
+    createdAt: serverTimestamp(),
+    updatedAt: null,
+  };
+  const docRef = await addDoc(collection(db, SAVED_PLANS_COLLECTION), docData).catch(serverError => {
+      const permissionError = new FirestorePermissionError({
+          path: SAVED_PLANS_COLLECTION,
+          operation: 'create',
+          requestResourceData: docData,
+      });
+      errorEmitter.emit('permission-error', permissionError);
+      throw permissionError;
+  });
 
-    console.log(`Saved plan with ID "${docRef.id}" for user "${planDetails.userId}".`);
-
-    const newPlanDoc = await getDoc(docRef);
-    return fromFirestore(newPlanDoc as DocumentData);
-
-  } catch (error) {
-    console.error(`Error saving plan for user "${planDetails.userId}":`, error);
-    throw new Error("Failed to save the lesson plan.");
-  }
+  const newPlanDoc = await getDoc(docRef);
+  return fromFirestore(newPlanDoc as DocumentData);
 }
 
 export async function updatePlan(userId: string, planToUpdate: SavedPlan): Promise<void> {
-  try {
-    const planRef = doc(db, SAVED_PLANS_COLLECTION, planToUpdate.id);
-    
-    const currentPlan = await getPlanById(userId, planToUpdate.id);
-    if (!currentPlan) {
-        throw new Error("Plan not found or you don't have permission to update it.");
-    }
+  const planRef = doc(db, SAVED_PLANS_COLLECTION, planToUpdate.id);
+  
+  // First, verify the user has access.
+  await getPlanById(userId, planToUpdate.id);
 
-    const updateData = {
-        ...planToUpdate,
-        updatedAt: serverTimestamp(),
-    };
-    delete (updateData as any).id; // Do not save the id inside the document
+  const updateData = {
+      ...planToUpdate,
+      updatedAt: serverTimestamp(),
+  };
+  delete (updateData as any).id; // Do not save the id inside the document
 
-    await updateDoc(planRef, updateData);
-    console.log(`Updated plan with ID "${planToUpdate.id}".`);
-  } catch (error) {
-    console.error(`Error updating plan with ID "${planToUpdate.id}":`, error);
-    throw new Error("Failed to update the lesson plan.");
-  }
+  await updateDoc(planRef, updateData).catch(serverError => {
+      const permissionError = new FirestorePermissionError({
+          path: planRef.path,
+          operation: 'update',
+          requestResourceData: updateData,
+      });
+      errorEmitter.emit('permission-error', permissionError);
+      throw permissionError;
+  });
 }
 
 export async function deletePlan(userId: string, planId: string): Promise<void> {
-  try {
     const planRef = doc(db, SAVED_PLANS_COLLECTION, planId);
 
-    const currentPlan = await getPlanById(userId, planId);
-    if (!currentPlan) {
-        throw new Error("Plan not found or you don't have permission to delete it.");
-    }
-
-    await deleteDoc(planRef);
-    console.log(`Deleted plan with ID "${planId}".`);
-  } catch (error) {
-    console.error(`Error deleting plan with ID "${planId}":`, error);
-    throw new Error("Failed to delete the lesson plan.");
-  }
+    // First, verify the user has access before attempting deletion.
+    await getPlanById(userId, planId);
+    
+    await deleteDoc(planRef).catch(serverError => {
+        const permissionError = new FirestorePermissionError({
+            path: planRef.path,
+            operation: 'delete',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        throw permissionError;
+    });
 }

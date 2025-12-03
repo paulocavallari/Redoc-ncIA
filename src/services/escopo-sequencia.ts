@@ -8,6 +8,9 @@
 import { db } from '@/lib/firebase';
 import { collection, writeBatch, getDocs, query, where, CollectionReference, doc } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
+
 
 export const EDUCATION_LEVELS = [
   "Anos Iniciais",
@@ -255,10 +258,28 @@ export async function saveEscopoDataToFirestore(level: EducationLevel, data: Esc
     onProgress(10);
     console.log(`Deleting existing documents for level: ${level}`);
     const deleteQuery = query(escopoCollection, where('level', '==', level));
-    const deleteSnapshot = await getDocs(deleteQuery);
+    
+    const deleteSnapshot = await getDocs(deleteQuery).catch(serverError => {
+        const permissionError = new FirestorePermissionError({
+            path: escopoCollection.path,
+            operation: 'list',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        throw permissionError; // Stop execution
+    });
+
     const deleteBatch = writeBatch(db);
     deleteSnapshot.docs.forEach(doc => deleteBatch.delete(doc.ref));
-    await deleteBatch.commit();
+    
+    await deleteBatch.commit().catch(serverError => {
+        const permissionError = new FirestorePermissionError({
+            path: `batch delete on ${escopoCollection.path}`,
+            operation: 'delete',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        throw permissionError; // Stop execution
+    });
+
     console.log(`Deleted ${deleteSnapshot.size} old documents for level "${level}".`);
     onProgress(30);
 
@@ -274,7 +295,15 @@ export async function saveEscopoDataToFirestore(level: EducationLevel, data: Esc
         itemsProcessed++;
 
         if ((i + 1) % 500 === 0 || i === totalItems - 1) {
-            await addBatch.commit();
+            await addBatch.commit().catch(serverError => {
+                const permissionError = new FirestorePermissionError({
+                    path: `batch write on ${escopoCollection.path}`,
+                    operation: 'create',
+                    requestResourceData: `(batch of ${itemsProcessed - (i % 500)} items)` // Example data
+                });
+                errorEmitter.emit('permission-error', permissionError);
+                throw permissionError; // Stop execution
+            });
             addBatch = writeBatch(db);
             const progress = 30 + (itemsProcessed / totalItems) * 70;
             onProgress(progress);
@@ -290,15 +319,24 @@ export async function getAllEscopoDataFromFirestore(): Promise<{ [key in Educati
     console.log("Fetching all escopo-sequencia data from Firestore...");
     const escopoCollection = collection(db, ESCOPO_COLLECTION) as CollectionReference<EscopoSequenciaItem>;
     const q = query(escopoCollection);
-    const querySnapshot = await getDocs(q);
+    
+    const querySnapshot = await getDocs(q).catch(serverError => {
+        const permissionError = new FirestorePermissionError({
+            path: escopoCollection.path,
+            operation: 'list',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        // Return an empty snapshot to avoid crashing the app, error is already emitted.
+        return { docs: [] }; 
+    });
 
     const allData: { [key in EducationLevel]?: EscopoSequenciaItem[] } = {};
     for (const level of EDUCATION_LEVELS) {
         allData[level] = [];
     }
 
-    querySnapshot.forEach((doc) => {
-        const item = doc.data();
+    querySnapshot.docs.forEach((doc) => {
+        const item = doc.data() as EscopoSequenciaItem;
         if (item.level && allData[item.level]) {
             allData[item.level]!.push(item);
         }
