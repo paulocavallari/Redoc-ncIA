@@ -1,12 +1,107 @@
+/**
+ * Core Philosophy: This ruleset enforces a strict user-ownership model combined with global, role-based access for administrative tasks.
+ * The primary security principle is that users can only access and manage their own data. A separate collection of admin roles grants
+ * elevated privileges for managing shared, application-wide data.
+ *
+ * Data Structure:
+ * - /users/{userId}/... : A user-specific data tree containing their profile and private subcollections like 'lessonPlans'.
+ *   This isolates user data and simplifies ownership-based rules.
+ * - /scopeSequenceData/{scopeSequenceDataId}: A top-level collection containing data that is readable by all authenticated users
+ *   but only writable by administrators.
+ * - /roles_admin/{userId}: A lookup collection to manage admin roles. The existence of a document for a given user UID in this
+ *   collection grants them admin privileges across the application.
+ *
+ * Key Security Decisions:
+ * - User Enumeration is Disabled: Listing documents in the top-level '/users' collection is explicitly disallowed to protect user privacy.
+ * - Admin-Managed Content: The '/scopeSequenceData' collection is managed exclusively by users with an admin role, separating public
+ *   data management from regular user permissions.
+ * - Self-Service Profile Creation: Users are permitted to create their own user profile document in '/users/{userId}', but only if the
+ *   document ID matches their authentication UID.
+ *
+ * Denormalization for Authorization:
+ * To ensure fast and simple authorization checks, ownership information is denormalized. For example, the User document contains an
+ * `id` field that must match the user's Auth UID, and LessonPlan documents contain a `userId` field. This avoids costly `get` calls
+ * and makes rules more efficient and readable.
+ *
+ * Structural Segregation:
+ * The ruleset leverages separate top-level collections for different data access patterns. Private user data is nested under `/users`,
+ * while globally readable data is stored in `/scopeSequenceData`. This segregation simplifies list operations and strengthens security by
+ * preventing accidental data exposure.
+ */
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    // WARNING: This is a temporary rule for debugging purposes ONLY.
-    // It allows open access to the entire database.
-    // This should NOT be used in a production environment.
-    match /{document=**} {
-      allow read, write: if true;
+
+    // Helper functions for reusable logic
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid));
+    }
+
+    /**
+     * @description Controls access to user profile documents. A user can create their own profile, and thereafter can only read or modify their own document.
+     * @path /users/{userId}
+     * @allow (create) An authenticated user creating their own profile: `create /users/user_abc` with auth.uid=`user_abc`.
+     * @deny (create) A user trying to create a profile for someone else: `create /users/user_xyz` with auth.uid=`user_abc`.
+     * @deny (list) Any user trying to list all users: `list /users`.
+     * @principle Restricts access to a user's own data tree and enables self-service profile creation.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isOwner(userId) && resource != null && request.resource.data.id == resource.data.id;
+      allow delete: if isOwner(userId) && resource != null;
+
+      /**
+       * @description Controls access to a user's collection of lesson plans. Only the owner can manage their own lesson plans.
+       * @path /users/{userId}/lessonPlans/{lessonPlanId}
+       * @allow (create) A user creating a lesson plan for themselves: `create /users/user_abc/lessonPlans/plan_123` with auth.uid=`user_abc`.
+       * @deny (read) A user trying to read another user's lesson plan: `get /users/user_xyz/lessonPlans/plan_456` with auth.uid=`user_abc`.
+       * @principle Enforces document ownership for all operations within a user's private subcollection.
+       */
+      match /lessonPlans/{lessonPlanId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isOwner(userId) && resource != null && request.resource.data.userId == resource.data.userId;
+        allow delete: if isOwner(userId) && resource != null;
+      }
+    }
+
+    /**
+     * @description Controls access to the collection that defines admin roles. Only existing admins can read or manage this collection.
+     * @path /roles_admin/{userId}
+     * @allow (list) An admin listing all other admin roles: `list /roles_admin` with an auth.uid that exists in this collection.
+     * @deny (create) A non-admin user trying to grant themselves admin privileges: `create /roles_admin/user_abc` with auth.uid=`user_abc`.
+     * @principle Protects role-granting functionality by restricting it to already-privileged users.
+     */
+    match /roles_admin/{userId} {
+      allow get: if isAdmin();
+      allow list: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
+    }
+
+    /**
+     * @description Controls access to shared scope and sequence data. This data is readable by any signed-in user but can only be modified by an admin.
+     * @path /scopeSequenceData/{scopeSequenceDataId}
+     * @allow (read) Any authenticated user reading a document: `get /scopeSequenceData/doc_123` with any valid auth.uid.
+     * @deny (write) A non-admin user trying to create a document: `create /scopeSequenceData/doc_456` without admin role.
+     * @principle Segregates public-read data from admin-only write operations using role-based access control.
+     */
+    match /scopeSequenceData/{scopeSequenceDataId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isAdmin();
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
     }
   }
 }
