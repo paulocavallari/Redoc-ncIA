@@ -4,7 +4,7 @@
  */
 
 import { db } from '@/lib/firebase'; // Firestore instance
-import { collection, writeBatch, getDocs, query, where, CollectionReference, DocumentData } from 'firebase/firestore';
+import { collection, writeBatch, getDocs, query, where, CollectionReference, doc } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 
 // Define Education Levels (remains the same)
@@ -46,7 +46,7 @@ const extractNumber = (value: any): string => {
 const POSSIBLE_HEADERS: { [key in keyof Omit<EscopoSequenciaItem, 'level'>]?: string[] } = {
     anoSerie: ['ANO/SÉRIE', 'Ano/Série', 'Ano', 'Série'],
     bimestre: ['BIMESTRE', 'Bimestre'],
-    habilidade: ['HABILIDADE', 'Habilidade', 'Habilidades'],
+    habilidade: ['HABILIDADE', 'Habilidade', 'Habilidades', 'HABILIDADES'],
     objetosDoConhecimento: ['OBJETOS DO CONHECIMENTO', 'Objetos do Conhecimento', 'Objeto do Conhecimento', 'Objetos de Conhecimento', 'Objetos de conhecimento'],
     conteudo: ['CONTEUDO', 'Conteúdo', 'Conteudos', 'Conteúdos'],
     objetivos: ['OBJETIVOS', 'Objetivos', 'Objetivo'],
@@ -129,11 +129,11 @@ export function processEscopoFile(fileData: ArrayBuffer, level: EducationLevel):
   const workbook = XLSX.read(fileData, { type: 'buffer' });
   const allData: EscopoSequenciaItem[] = [];
 
-  const headerSearchStartRowIndex = level === 'Anos Iniciais' ? 1 : 0; // Start at row 2 for "Anos Iniciais"
+  const headerSearchStartRowIndex = level === 'Anos Iniciais' ? 1 : 0;
 
   workbook.SheetNames.forEach((sheetName) => {
     const trimmedSheetName = sheetName.trim();
-    if (trimmedSheetName.toLowerCase() === 'índice') {
+    if (trimmedSheetName.toLowerCase() === 'índice' || trimmedSheetName.toLowerCase().includes('capa')) {
       return;
     }
     if (trimmedSheetName.toLowerCase() === 'projeto de convivência') {
@@ -223,13 +223,14 @@ export async function saveEscopoDataToFirestore(level: EducationLevel, data: Esc
 
     // 2. Add new documents in batches
     console.log(`Adding ${data.length} new documents for level "${level}".`);
-    const addBatch = writeBatch(db);
+    
+    let addBatch = writeBatch(db);
     data.forEach((item, index) => {
-        const docRef = collection(db, ESCOPO_COLLECTION).doc(); // Auto-generate ID
+        const docRef = doc(collection(db, ESCOPO_COLLECTION)); // Auto-generate ID (FIXED)
         addBatch.set(docRef, item);
         if ((index + 1) % 500 === 0) { // Firestore batch limit is 500
             addBatch.commit();
-            // batch = writeBatch(db); // Re-initialize batch
+            addBatch = writeBatch(db); // Re-initialize batch
         }
     });
     await addBatch.commit(); // Commit the last batch
