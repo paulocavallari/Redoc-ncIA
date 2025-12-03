@@ -9,17 +9,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { useToast } from "@/hooks/use-toast";
-import { Upload, KeyRound, ArrowLeft, BookOpenCheck, AlertTriangle, GraduationCap } from 'lucide-react'; // Added GraduationCap
-import Link from 'next/link';
+import { Upload, KeyRound, AlertTriangle, GraduationCap } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { processEscopoFile, saveEscopoDataToStorage, EscopoSequenciaItem, EducationLevel, EDUCATION_LEVELS } from '@/services/escopo-sequencia'; // Import EducationLevel related items
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Import Select components
+import { processEscopoFile, saveEscopoDataToFirestore, type EscopoSequenciaItem, EducationLevel, EDUCATION_LEVELS } from '@/services/escopo-sequencia';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-
-// Local storage key can still be used for display/reference, but the hardcoded key is used by Genkit
 const API_KEY_STORAGE_KEY = 'google_genai_api_key';
-// Display the currently hardcoded key for reference (masked for security)
-const HARDCODED_API_KEY_DISPLAY = 'AIzaSyD...nhUYI'; // Masked version
+const HARDCODED_API_KEY_DISPLAY = 'AIzaSyD...nhUYI';
 
 export default function SettingsPage() {
   const { user, isLoading: authLoading } = useAuth();
@@ -27,30 +23,26 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [selectedLevel, setSelectedLevel] = useState<EducationLevel | ''>(''); // State for selected education level
+  const [selectedLevel, setSelectedLevel] = useState<EducationLevel | ''>('');
   const [isUploading, setIsUploading] = useState(false);
   const [isSavingKey, setIsSavingKey] = useState(false);
 
   useEffect(() => {
-    // Redirect non-admin users or if not logged in
     if (!authLoading && (!user || user.username !== 'admin')) {
-      router.push('/dashboard'); // Redirect non-admins to dashboard
+      router.push('/dashboard');
     }
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    // Load saved API key from localStorage on mount for the input field (display only)
     if (typeof window !== 'undefined') {
         const savedKey = localStorage.getItem(API_KEY_STORAGE_KEY);
-        setApiKeyInput(savedKey || ''); // Pre-fill input if a key was previously saved
+        setApiKeyInput(savedKey || '');
     }
   }, []);
-
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
       const file = event.target.files[0];
-      // Allow only .xlsx files
       if (file.name.endsWith('.xlsx')) {
          setSelectedFile(file);
       } else {
@@ -59,10 +51,9 @@ export default function SettingsPage() {
               description: "Por favor, selecione um arquivo .xlsx.",
               variant: "destructive",
           });
-          event.target.value = ''; // Clear the input
+          event.target.value = '';
           setSelectedFile(null);
       }
-
     } else {
         setSelectedFile(null);
     }
@@ -89,43 +80,39 @@ export default function SettingsPage() {
     setIsUploading(true);
     try {
         const fileData = await selectedFile.arrayBuffer();
-        console.log(`Processing file: ${selectedFile.name}, size: ${fileData.byteLength} bytes for level: ${selectedLevel}`);
-        // Pass the selected level to processEscopoFile
+        console.log(`Processing file: ${selectedFile.name} for level: ${selectedLevel}`);
+
+        // This part runs on the client to parse the file
         const processedData: EscopoSequenciaItem[] = processEscopoFile(fileData, selectedLevel);
 
         if (processedData.length > 0) {
-            // Pass the selected level to save function
-            saveEscopoDataToStorage(selectedLevel, processedData);
+            // This part saves the parsed data to Firestore
+            await saveEscopoDataToFirestore(selectedLevel, processedData);
             toast({
                 title: "Upload Concluído",
-                description: `Arquivo "${selectedFile.name}" processado para ${selectedLevel}. ${processedData.length} itens carregados. Os dados anteriores para este nível foram substituídos.`,
+                description: `Dados do arquivo "${selectedFile.name}" para ${selectedLevel} foram salvos no Firestore. ${processedData.length} itens carregados.`,
             });
-             // Dispatch event to notify dashboard to reload data - This should already be handled within saveEscopoDataToStorage
-
+             // The service dispatches an event to notify the app
         } else {
              toast({
-                title: "Processamento Concluído",
-                description: `Nenhum dado válido encontrado no arquivo "${selectedFile.name}" ou as colunas esperadas estão ausentes/incorretas. Verifique o console para mais detalhes. Nenhum dado foi salvo para ${selectedLevel}.`,
-                variant: "destructive", // Use destructive for warnings/errors during processing
-                duration: 10000, // Longer duration for error messages
+                title: "Processamento Concluído Sem Dados",
+                description: `Nenhum dado válido encontrado no arquivo "${selectedFile.name}". Verifique o formato e as colunas do arquivo.`,
+                variant: "destructive",
+                duration: 10000,
             });
         }
 
-        setSelectedFile(null); // Clear selection after processing
-        // Clear the file input visually
+        setSelectedFile(null);
         const fileInput = document.getElementById('escopoFile') as HTMLInputElement;
         if (fileInput) fileInput.value = '';
-        // Optionally reset level selection after upload? Or keep it? Keep for now.
-        // setSelectedLevel('');
-
 
     } catch (error) {
-        console.error("Error processing XLSX file:", error);
+        console.error("Error processing and uploading file:", error);
         toast({
           title: "Erro no Upload",
-          description: `Falha ao processar o arquivo "${selectedFile.name}". Verifique se o formato está correto. Detalhes: ${error instanceof Error ? error.message : String(error)}`,
+          description: `Falha ao processar ou salvar o arquivo. Verifique o console para detalhes. Erro: ${error instanceof Error ? error.message : String(error)}`,
           variant: "destructive",
-          duration: 10000, // Longer duration for error messages
+          duration: 10000,
         });
     } finally {
       setIsUploading(false);
@@ -155,22 +142,18 @@ export default function SettingsPage() {
     });
   };
 
-  // Render loading or nothing if auth check is happening or user is not admin
   if (authLoading || !user || user.username !== 'admin') {
     return (
-        <div className="flex flex-1 items-center justify-center bg-secondary"> {/* Use flex-1 and background */}
-            {/* Optional: Add a loading indicator */}
+        <div className="flex flex-1 items-center justify-center bg-secondary">
              <p>Carregando...</p>
         </div>
     );
   }
 
   return (
-    <div className="flex flex-1 flex-col bg-secondary"> {/* Use flex-1 and flex-col */}
-
+    <div className="flex flex-1 flex-col bg-secondary">
       <main className="flex-1 p-4 md:p-6 lg:p-8 flex justify-center">
         <div className="w-full max-w-2xl space-y-6">
-          {/* Upload Escopo-Sequência Card */}
           <Card className="shadow-md">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl">
@@ -178,21 +161,17 @@ export default function SettingsPage() {
                 Upload do Escopo-Sequência
               </CardTitle>
               <CardDescription>
-                Selecione o <strong>Nível de Ensino</strong> e faça o upload do arquivo <strong>.xlsx</strong> correspondente. O upload substituirá os dados existentes para o nível selecionado.
-                <br />
-                O nome da planilha (worksheet) será usado como o nome da Disciplina (ignore a planilha "Índice").
-                 As colunas esperadas (podem ter variações de nome) são: <strong>ANO/SÉRIE</strong> (será lido apenas o número), <strong>BIMESTRE</strong> (será lido apenas o número), <strong>HABILIDADE</strong>, <strong>OBJETOS DO CONHECIMENTO</strong>, <strong>CONTEUDO</strong>.
+                Selecione o <strong>Nível de Ensino</strong> e faça o upload do arquivo <strong>.xlsx</strong> correspondente. Isso substituirá os dados existentes para o nível selecionado no banco de dados (Firestore).
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-               {/* Education Level Selection */}
                <div className="space-y-2">
                   <Label htmlFor="educationLevel" className="flex items-center gap-1">
                     <GraduationCap className="h-4 w-4" /> Nível de Ensino *
                   </Label>
                   <Select
                     value={selectedLevel}
-                    onValueChange={(value) => setSelectedLevel(value as EducationLevel)} // Cast value to EducationLevel
+                    onValueChange={(value) => setSelectedLevel(value as EducationLevel)}
                     disabled={isUploading}
                   >
                     <SelectTrigger id="educationLevel">
@@ -205,33 +184,27 @@ export default function SettingsPage() {
                     </SelectContent>
                   </Select>
                </div>
-
-              {/* File Selection */}
               <div className="space-y-2">
                 <Label htmlFor="escopoFile">Selecionar Arquivo (.xlsx) *</Label>
                 <Input
                   id="escopoFile"
                   type="file"
-                  accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" // Accept only .xlsx
+                  accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   onChange={handleFileChange}
                   disabled={isUploading}
                    className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                 />
                  {selectedFile && <p className="text-sm text-muted-foreground mt-1">Arquivo selecionado: {selectedFile.name}</p>}
               </div>
-
-              {/* Upload Button */}
               <Button
                 onClick={handleUpload}
-                disabled={!selectedFile || !selectedLevel || isUploading} // Disable if no file OR no level selected
+                disabled={!selectedFile || !selectedLevel || isUploading}
                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
               >
-                {isUploading ? `Processando para ${selectedLevel}...` : 'Fazer Upload e Substituir Dados'}
+                {isUploading ? `Processando e Salvando...` : 'Fazer Upload e Substituir Dados'}
               </Button>
             </CardContent>
           </Card>
-
-           {/* Google GenAI API Key Card */}
           <Card className="shadow-md">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl">
@@ -241,7 +214,7 @@ export default function SettingsPage() {
                <Alert variant="destructive" className="mt-2">
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>
-                     A chave de API está atualmente codificada diretamente em <code>src/ai/ai-instance.ts</code>. O campo abaixo é apenas para referência. A chave ativa é: <strong>{HARDCODED_API_KEY_DISPLAY}</strong>.
+                     A chave de API está atualmente codificada em <code>src/ai/ai-instance.ts</code>. O campo abaixo é apenas para referência. A chave ativa é: <strong>{HARDCODED_API_KEY_DISPLAY}</strong>.
                   </AlertDescription>
                 </Alert>
               <CardDescription className="pt-2">
@@ -253,7 +226,7 @@ export default function SettingsPage() {
                 <Label htmlFor="apiKeyInput">Chave da API (Referência)</Label>
                 <Input
                   id="apiKeyInput"
-                  type="password" // Keep as password for masking
+                  type="password"
                   placeholder="Chave salva localmente (se houver)..."
                   value={apiKeyInput}
                   onChange={(e) => setApiKeyInput(e.target.value)}
